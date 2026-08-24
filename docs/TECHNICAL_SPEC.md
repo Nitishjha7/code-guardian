@@ -1,0 +1,130 @@
+# Multi-Agent Autonomous Code Reviewer & PR Bot: Technical Specification & Implementation Guide
+
+This document details the architectural blueprint, multi-agent orchestration model, safety constraints, and deployment guidelines for the Multi-Agent Autonomous Code Reviewer & PR Bot. Built using LangGraph, LangChain, Guardrails AI, Model Context Protocol (MCP), FastAPI, Docker, and React, this system automates multi-dimensional code auditing (security, performance, and code generation) with autonomous patch creation.
+
+## 1. System Overview & Core Value Proposition
+
+Manual peer code reviews are often slow and frequently miss subtle vulnerabilities like SQL injections, resource leaks, or performance degradation. A single generalist LLM prompt often lacks the domain-specific rigor required for deep auditing. The Multi-Agent Code Reviewer employs specialized agent personas coordinated via a centralized LangGraph Supervisor:
+
+- **Specialized Agent Personas**: Independent auditing nodes for AppSec (OWASP, secret leaks) and Performance (Big-O, memory, caching).
+- **Autonomous Remediation**: A Patch Generator Node synthesizes the findings of both auditors to produce actionable, production-ready code diffs.
+- **Policy & Secrets Guardrails**: Guardrails AI guarantees that emitted code patches and comments do not expose environment variables, proprietary keys, or harmful configurations.
+- **MCP Integration**: Integrates GitHub MCP Server and Filesystem MCP Server to read pull requests and inspect repository trees natively.
+
+## 2. Architecture & Multi-Agent Tech Stack
+
+| Component | Technology | Role in System |
+|---|---|---|
+| Agent Orchestrator | LangGraph (StateGraph) | Multi-agent supervisor pattern, parallel fan-out analysis, state reducer, and edge routing. |
+| LLM Engine | LangChain + Groq (Llama 3.3 70B / Claude / Gemini) | Inference engine powering specialized security, performance, and remediation agents. |
+| Safety & Guardrails | Guardrails AI (Secrets & Toxic Guards) | Scans output diffs to prevent API key leaks and validates tone of automated PR comments. |
+| Tooling Layer (MCP) | GitHub MCP Server / PyGithub | Model Context Protocol client fetching PR metadata, changed files, and posting review comments. |
+| Backend API | FastAPI (Asynchronous) | Provides webhook listener for GitHub PR events and REST endpoints for UI interaction. |
+| Frontend Workspace | React + Tailwind CSS / Monaco Editor | Interactive code review dashboard displaying split diff views, security alerts, and agent logs. |
+| Container Orchestration | Docker & Docker Compose | Containerized microservice stack ensuring reproducible local and cloud deployment. |
+
+## 3. Multi-Agent State Machine & Graph Topology
+
+The workflow employs a Supervisor/Fan-out architecture where Security and Performance audits run in parallel or sequentially, feeding their findings into a Patch Synthesizer before Guardrail validation.
+
+```
+                       +----------------------+
+                       | User Code / PR Input |
+                       +----------------------+
+                                  |
+                                  v
+                       +----------------------+
+                       |  Supervisor / Router |
+                       +----------------------+
+                                  |
+                   +--------------+--------------+
+                   |                             |
+                   v                             v
+        +--------------------+        +--------------------+
+        |   Security Agent   |        | Performance Agent  |
+        | (OWASP, Auth, PII) |        | (Big-O, Memory, DB)|
+        +--------------------+        +--------------------+
+                   |                             |
+                   +--------------+--------------+
+                                  |
+                                  v
+                       +----------------------+
+                       | Patch Generator Node |
+                       | (Produces Git Diff)  |
+                       +----------------------+
+                                  |
+                                  v
+                       +----------------------+
+                       | Guardrail Validator  |
+                       +----------------------+
+                                  |
+                                  v
+                       +----------------------+
+                       | Final Review & Patch |
+                       +----------------------+
+```
+
+### Multi-Agent State Schema Definition
+
+```python
+class ReviewerState(TypedDict):
+    source_code: str               # Raw input code or pull request diff
+    language: str                  # Python, JavaScript, SQL, Go, etc.
+    security_issues: List[str]     # Findings from Security Agent
+    performance_issues: List[str]  # Findings from Performance Agent
+    fixed_code: str                # Remediation code generated by Patch Agent
+    summary_report: str            # Final consolidated markdown review
+    logs: List[str]                # Real-time state execution logs
+```
+
+## 4. Specialized Agent Responsibilities
+
+| Agent Persona | Audit Focus & Rules | Expected Deliverable |
+|---|---|---|
+| Security Agent | OWASP Top 10, SQL Injection, hardcoded API secrets, unauthorized access, insecure deserialization. | Categorized vulnerability list with severity ratings (Critical, High, Medium). |
+| Performance Agent | Unoptimized loops (O(n²) to O(n)), N+1 database queries, memory leaks, unclosed streams, missing indexes. | Optimization recommendations with Big-O complexity comparison. |
+| Patch Generator | Synthesizes Security and Performance feedback without altering the original business logic. | Full refactored code block and unified git diff patch. |
+| Supervisor / Formatter | Aggregates node deliverables into clean GitHub PR Markdown format and passes through Guardrails AI. | Production-ready markdown comment and sanitized code response. |
+
+## 5. Implementation Roadmap: 2-Phase Strategy
+
+### Phase 1: Local Code Review Studio (1-2 Days)
+- Set up LangGraph graph with Security, Performance, and Patch nodes.
+- Create FastAPI `/api/review` endpoint.
+- Build React UI with code textarea, syntax highlighting, and collapsible audit cards.
+
+### Phase 2: GitHub PR Bot & MCP Integration (Bonus / Advanced)
+- Connect GitHub MCP Server or GitHub Webhook listener.
+- Automatically trigger analysis when a Pull Request is opened or updated.
+- Post formatted reviews and patch suggestions directly as PR review comments.
+
+## 6. Docker Deployment Configuration
+
+The system is packaged with Docker Compose, providing seamless orchestration for both local code auditing and GitHub webhook ingestion.
+
+- `docker-compose.yml` sets up the asynchronous FastAPI backend and React frontend served via Nginx reverse proxy.
+- Environment variables (`GROQ_API_KEY`, `GITHUB_TOKEN`) are injected dynamically at runtime.
+
+## 7. Future Phases
+
+### Phase 3: Advanced Intelligence Layer
+- **Code Quality Agent** — naya agent jo readability, naming conventions, DRY principle check kare.
+- **Test Coverage Agent** — dekh le ki naya code test cases ke saath hai ya nahi, aur khud test cases generate kar de.
+- **Dependency/License Agent** — check kare ki naye packages mein koi vulnerable ya risky license wali library toh nahi aa rahi (jaise npm audit ka AI version).
+- **Documentation Agent** — automatically docstrings/comments generate kare jo missing hain.
+
+### Phase 4: Learning & Memory
+- **Feedback Loop** — agar developer ne AI ka suggestion reject kiya, system yaad rakhe (vector DB mein store karke) taaki agli baar wahi galti na kare.
+- **Team-specific rules** — har team ka apna coding style guide ho, us hisaab se review customize ho (RAG use karke).
+- **Historical PR analysis** — purane bugs ka data dekh ke pattern samjhe ki is codebase mein kaunsi galtiyan baar baar hoti hain.
+
+### Phase 5: CI/CD Integration
+- **Auto-block merge** — agar Critical security issue mile toh PR ko merge hone se rok de (GitHub branch protection ke saath).
+- **Slack/Discord notifications** — jab review complete ho ya critical issue mile, team ko turant alert bheje.
+- **Auto-create Jira/Linear ticket** — agar bada issue mile toh khud hi ticket bana de.
+
+### Extra Cool Features
+- **Multi-language support** — abhi Python/JS wagera hai, isme Rust, Go, Java bhi add kar sakte ho.
+- **Voice/Chat interface** — developer chat mein bot se poochh sake "ye function kyun flag hua?"
+- **Diff visualization** — Monaco editor mein side-by-side before/after with inline explanations.
+- **Cost/token tracking dashboard** — kitna LLM cost lag raha hai per review, wo track kare.
