@@ -29,6 +29,7 @@ docs/                         # Setup & technical spec docs
 
 - [Setup Guide](docs/SETUP.md) — git init, folder structure, and pushing to GitHub.
 - [Technical Specification](docs/TECHNICAL_SPEC.md) — architecture, multi-agent graph topology, agent responsibilities, roadmap, and future phases.
+- [Build & Deploy Guide](docs/BUILD_AND_DEPLOY.md) — what to prioritize for an interview showcase, build order, and deployment steps (Render/Railway + Cloudflare Pages).
 
 ## Roadmap
 
