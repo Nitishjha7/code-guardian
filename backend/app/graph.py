@@ -38,6 +38,34 @@ def _route_after_supervisor(state: ReviewerState) -> str:
     return "collect"
 
 
+def _unpack_audit(content: object) -> tuple[list[Finding], str | None]:
+    """Read one audit's tool result.
+
+    Returns ``(findings, error)``; exactly one of the two is meaningful. Note
+    that anything unparseable counts as an *error*, not as an empty result:
+    LangGraph's ToolNode turns an uncaught exception into a plain-text
+    ToolMessage, and reading that as "no findings" is precisely the silent-pass
+    bug this function exists to prevent.
+    """
+    try:
+        payload = json.loads(content or "")
+    except (json.JSONDecodeError, TypeError):
+        return [], f"unparseable audit result: {str(content)[:200]}"
+
+    if isinstance(payload, dict):
+        if not payload.get("ok", False):
+            return [], str(payload.get("error", "audit reported failure"))
+        raw = payload.get("findings", [])
+    elif isinstance(payload, list):
+        raw = payload  # tolerated for forward/backward compatibility
+    else:
+        return [], f"unexpected audit result type: {type(payload).__name__}"
+
+    if not isinstance(raw, list):
+        return [], "audit returned a non-list findings field"
+    return [f for f in raw if isinstance(f, dict)], None
+
+
 def collect_node(state: ReviewerState) -> dict:
     """Fold the ToolMessages produced by the audits into typed state.
 
@@ -48,35 +76,47 @@ def collect_node(state: ReviewerState) -> dict:
     security: list[Finding] = []
     performance: list[Finding] = []
     routed: list[str] = []
+    failed: list[str] = []
+    errors: list[str] = []
 
     for message in state.get("messages") or []:
         if not isinstance(message, ToolMessage):
             continue
-        try:
-            findings = json.loads(message.content or "[]")
-        except (json.JSONDecodeError, TypeError):
-            findings = []
-        if not isinstance(findings, list):
-            findings = []
+        if message.name not in ("security_audit", "performance_audit"):
+            continue
+
+        routed.append(message.name)
+        findings, error = _unpack_audit(message.content)
+
+        if error is not None:
+            # An audit that never produced a result must not be rendered as a
+            # clean pass. Record it so the report and the API can say so.
+            failed.append(message.name)
+            errors.append(f"{message.name}: {error}")
+            continue
 
         if message.name == "security_audit":
-            security.extend(f for f in findings if isinstance(f, dict))
-            routed.append("security_audit")
-        elif message.name == "performance_audit":
-            performance.extend(f for f in findings if isinstance(f, dict))
-            routed.append("performance_audit")
+            security.extend(findings)
+        else:
+            performance.extend(findings)
 
     security.sort(key=lambda f: _SEVERITY_ORDER.get(f.get("severity", "Medium"), 2))
     performance.sort(key=lambda f: _SEVERITY_ORDER.get(f.get("severity", "Medium"), 2))
+
+    log = (
+        f"Collector: {len(security)} security finding(s), "
+        f"{len(performance)} performance finding(s)."
+    )
+    if failed:
+        log += f" {len(failed)} audit(s) FAILED: {', '.join(failed)}."
 
     return {
         "security_issues": security,
         "performance_issues": performance,
         "routed_to": sorted(set(routed)),
-        "logs": [
-            f"Collector: {len(security)} security finding(s), "
-            f"{len(performance)} performance finding(s)."
-        ],
+        "failed_audits": sorted(set(failed)),
+        "audit_errors": errors,
+        "logs": [log],
     }
 
 
@@ -111,8 +151,24 @@ def _render_report(state: ReviewerState, diff: str) -> str:
     security = state.get("security_issues") or []
     performance = state.get("performance_issues") or []
     routed = state.get("routed_to") or []
+    failed = state.get("failed_audits") or []
+    errors = state.get("audit_errors") or []
 
     lines = ["## Code Guardian Review", ""]
+
+    if failed:
+        # This banner leads the report on purpose: a reader who skims must not
+        # walk away thinking the code was reviewed and came back clean.
+        lines += [
+            "> **This review is incomplete.** "
+            f"{len(failed)} audit(s) failed to run: "
+            f"{', '.join(a.replace('_', ' ') for a in failed)}. "
+            "Do not treat the sections below as a clean bill of health.",
+            "",
+        ]
+        for err in errors:
+            lines.append(f"> - `{err}`")
+        lines.append("")
 
     if not routed:
         lines += [
@@ -132,7 +188,13 @@ def _render_report(state: ReviewerState, diff: str) -> str:
         "",
     ]
 
-    def section(title: str, findings: list[Finding], perf: bool = False) -> list[str]:
+    def section(
+        title: str, findings: list[Finding], tool_name: str, perf: bool = False
+    ) -> list[str]:
+        if tool_name in failed:
+            return [f"### {title}", "", "**Audit failed - this code was not checked.**", ""]
+        if tool_name not in routed:
+            return [f"### {title}", "", "_Not run: the supervisor routed around it._", ""]
         if not findings:
             return [f"### {title}", "", "No issues found.", ""]
         out = [f"### {title}", ""]
@@ -155,8 +217,8 @@ def _render_report(state: ReviewerState, diff: str) -> str:
             out += ["</details>", ""]
         return out
 
-    lines += section("Security", security)
-    lines += section("Performance", performance, perf=True)
+    lines += section("Security", security, "security_audit")
+    lines += section("Performance", performance, "performance_audit", perf=True)
 
     if diff:
         lines += ["### Suggested patch", "", "```diff", diff.rstrip("\n"), "```", ""]

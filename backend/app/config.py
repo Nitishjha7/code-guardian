@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     )
 
     groq_api_key: str = ""
-    guardian_model: str = "llama-3.3-70b-versatile"
+    guardian_model: str = "openai/gpt-oss-120b"
     guardian_cors_origins: str = "http://localhost:5173,http://localhost:3000"
 
     # Phase 2

@@ -87,6 +87,8 @@ class Finding(BaseModel):
 class ReviewResponse(BaseModel):
     language: str
     routed_to: list[str]
+    failed_audits: list[str]
+    audit_errors: list[str]
     security_issues: list[Finding]
     performance_issues: list[Finding]
     fixed_code: str
@@ -147,6 +149,8 @@ async def review(request: ReviewRequest) -> ReviewResponse:
     return ReviewResponse(
         language=state.get("language", request.language),
         routed_to=state.get("routed_to", []),
+        failed_audits=state.get("failed_audits", []),
+        audit_errors=state.get("audit_errors", []),
         security_issues=[Finding(**f) for f in state.get("security_issues", [])],
         performance_issues=[Finding(**f) for f in state.get("performance_issues", [])],
         fixed_code=state.get("fixed_code", ""),

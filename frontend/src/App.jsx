@@ -164,6 +164,21 @@ export default function App() {
 
           {result && (
             <>
+              {result.failed_audits.length > 0 && (
+                <div className="rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                  <b>This review is incomplete.</b>{' '}
+                  {result.failed_audits
+                    .map((a) => a.replace('_', ' '))
+                    .join(', ')}{' '}
+                  failed to run — the sections below are not a clean bill of health.
+                  <ul className="mt-2 space-y-1 font-mono text-[11px] text-red-300/90">
+                    {result.audit_errors.map((e, i) => (
+                      <li key={i}>{e}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="rounded border border-slate-700 bg-slate-900 px-2 py-1">
                   Routed to:{' '}
@@ -218,12 +233,14 @@ export default function App() {
                     <Group
                       title="Security"
                       findings={result.security_issues}
-                      ran={result.routed_to.includes('security_audit')}
+                      ran={result.routed_to.includes("security_audit")}
+                      failed={result.failed_audits.includes("security_audit")}
                     />
                     <Group
                       title="Performance"
                       findings={result.performance_issues}
-                      ran={result.routed_to.includes('performance_audit')}
+                      ran={result.routed_to.includes("performance_audit")}
+                      failed={result.failed_audits.includes("performance_audit")}
                     />
                   </>
                 )}
@@ -255,16 +272,23 @@ export default function App() {
   )
 }
 
-function Group({ title, findings, ran }) {
+function Group({ title, findings, ran, failed }) {
   return (
     <div className="space-y-2">
       <h2 className="text-sm font-semibold text-slate-100">
         {title}{' '}
-        <span className="font-normal text-slate-500">
-          {ran ? `· ${findings.length}` : '· not run'}
+        <span
+          className={`font-normal ${failed ? 'text-red-400' : 'text-slate-500'}`}
+        >
+          {failed ? '· failed' : ran ? `· ${findings.length}` : '· not run'}
         </span>
       </h2>
-      {!ran ? (
+      {failed ? (
+        <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-xs text-red-300">
+          This audit failed to run. The code was <b>not</b> checked for{' '}
+          {title.toLowerCase()} issues.
+        </p>
+      ) : !ran ? (
         <p className="rounded-lg border border-dashed border-slate-800 px-4 py-3 text-xs text-slate-500">
           The supervisor decided this submission did not need a {title.toLowerCase()}{' '}
           audit.

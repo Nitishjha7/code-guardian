@@ -47,6 +47,24 @@ def set_current_input(source_code: str, language: str) -> None:
     _CURRENT_INPUT.set((source_code, language))
 
 
+def _run_audit(name: str, audit_fn) -> str:
+    """Run one specialist and wrap the result in a success/failure envelope.
+
+    The envelope exists because of the worst bug this system can have: if an
+    audit raises (bad API key, decommissioned model, rate limit) and that is
+    silently turned into "no findings", the review reports **clean code** on
+    code it never actually looked at. A bare JSON array cannot distinguish
+    "audited, found nothing" from "never ran", so every audit reports which of
+    the two happened and the graph refuses to render a failed audit as a pass.
+    """
+    source_code, language = _CURRENT_INPUT.get()
+    try:
+        findings = audit_fn(source_code, language)
+        return json.dumps({"ok": True, "findings": findings})
+    except Exception as exc:  # noqa: BLE001 - the failure must reach the report
+        return json.dumps({"ok": False, "error": f"{type(exc).__name__}: {exc}"})
+
+
 @tool
 def security_audit() -> str:
     """Audit the submitted code for security defects.
@@ -59,11 +77,9 @@ def security_audit() -> str:
     Do NOT call this for pure styling (CSS), pure formatting changes, static
     copy or markup with no data handling, or comment-only edits.
 
-    Returns a JSON array of findings with severity ratings.
+    Returns a JSON envelope with the findings and their severity ratings.
     """
-    source_code, language = _CURRENT_INPUT.get()
-    findings = security_agent.audit(source_code, language)
-    return json.dumps(findings)
+    return _run_audit("security", security_agent.audit)
 
 
 @tool
@@ -77,11 +93,10 @@ def performance_audit() -> str:
     Do NOT call this for pure configuration files, static markup, styling, or
     declarative data with no execution.
 
-    Returns a JSON array of findings with Big-O before/after where applicable.
+    Returns a JSON envelope with the findings and Big-O before/after where
+    applicable.
     """
-    source_code, language = _CURRENT_INPUT.get()
-    findings = performance_agent.audit(source_code, language)
-    return json.dumps(findings)
+    return _run_audit("performance", performance_agent.audit)
 
 
 TOOLS = [security_audit, performance_audit]

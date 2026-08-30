@@ -54,5 +54,17 @@ class ReviewerState(TypedDict, total=False):
     guardrail_report: dict[str, Any]
     routed_to: list[str]
 
+    # Audits that were invoked but never produced a result (bad key, dead model,
+    # rate limit). Kept separate from "audited and found nothing" so that a
+    # failed audit can never be rendered as a clean pass.
+    failed_audits: list[str]
+    audit_errors: list[str]
+
+    # Audits that were invoked but never produced a result (bad key, dead model,
+    # rate limit). Kept separate from "found nothing" so a failed audit can never
+    # be rendered as a clean pass.
+    failed_audits: list[str]
+    audit_errors: list[str]
+
     force_full_audit: bool
     logs: Annotated[list[str], operator.add]
