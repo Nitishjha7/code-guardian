@@ -1,8 +1,17 @@
-venv/
+# Python
 __pycache__/
 *.pyc
+venv/
+.venv/
+.pytest_cache/
+
+# Node
 node_modules/
 dist/
+build/
+.vite/
+
+# Secrets & local state
 .env
 *.db
 *.log

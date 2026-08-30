@@ -38,15 +38,45 @@ Ye sab already [TECHNICAL_SPEC.md](TECHNICAL_SPEC.md) ke "Future Phases" section
 - Ek tricky design decision explain karne ke liye ready raho — jaise Guardrails kyun use kiya (secrets leak prevent karna), ya LangGraph state design kyun aisa rakha.
 - **Live demo ready rakho**: vulnerable code paste karo (e.g. SQL injection wala snippet) → dikhao Security Agent flag karta hai → Patch Generator fix suggest karta hai.
 
-## Build Order (suggested)
+## Build Order (status)
 
-1. `backend/app/graph.py` — LangGraph StateGraph + `ReviewerState` schema
-2. `backend/app/agents/security_agent.py` + `performance_agent.py` — LLM calls with focused prompts
-3. `backend/app/agents/patch_generator.py` — synthesize both findings into a diff
-4. `backend/app/guardrails_config/` — secrets + toxicity guard on final output
-5. FastAPI `/api/review` endpoint wiring the graph
-6. React frontend — code input + result display
-7. (Bonus) GitHub webhook + MCP client for PR automation
+1. ✅ `backend/app/graph.py` — LangGraph StateGraph + `ReviewerState` (in `state.py`)
+2. ✅ `backend/app/agents/security_agent.py` + `performance_agent.py` — LLM calls with focused prompts
+3. ✅ `backend/app/agents/patch_generator.py` — synthesize both findings into a diff
+4. ✅ `backend/app/guardrails_config/` — secrets + tone guard on final output
+5. ✅ FastAPI `/api/review` endpoint wiring the graph (`backend/app/main.py`)
+6. ✅ React frontend — Monaco input + findings / patch / markdown / agent-log tabs
+7. ❌ (Bonus) GitHub webhook + MCP client for PR automation — `app/mcp_clients/` is still empty
+
+### Implementation notes worth knowing before the interview
+
+Three places where the code deliberately departs from the naive reading of the
+spec. Each is a decision you should be able to defend, not an accident:
+
+- **The diff is computed with `difflib`, not asked for from the LLM.** Models
+  emit unified diffs with wrong hunk headers and line counts constantly, and
+  such a patch will not apply. The model is asked only for the rewritten file;
+  the diff is derived from the two texts, which is exact by construction.
+- **Guardrails AI is an optional dependency; a local pattern scanner is the
+  default.** Some `guardrails-ai` hub validators pull a full torch install — a
+  bad trade for a container that otherwise fits in a few hundred MB. The
+  fallback is written as a real guard (11 secret patterns, placeholder-aware so
+  it does not flag the `os.environ[...]` the patch agent is *supposed* to emit),
+  and `guardrail_report.engine` always names which engine produced the result.
+  Do not claim "Guardrails AI" in an interview without saying this.
+- **The router has a static backstop.** `looks_high_stakes()` in
+  `supervisor.py` force-runs both auditors when the input obviously touches an
+  auth, DB or exec surface, so the recall risk from §3a does not depend on the
+  caller remembering to set `force_full_audit`. Deliberately over-inclusive: a
+  false positive costs one extra audit, a false negative costs a vulnerability.
+
+### What is tested
+
+`backend/tests/` covers the LLM-free seams — JSON recovery from messy model
+output, diff generation, the conditional-edge routing predicate, the state
+collector (including a malformed tool result), and every guardrail pattern.
+21 tests, no API key needed. There is **no** end-to-end test against a live
+model; the agent prompts are unvalidated until you run a real review.
 
 ---
 

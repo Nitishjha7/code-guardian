@@ -1,0 +1,7 @@
+FROM python:3.11-slim
+ENV PIP_NO_CACHE_DIR=1
+WORKDIR /srv
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt pytest==8.3.4
+COPY . .
+CMD ["pytest", "-q"]

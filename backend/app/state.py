@@ -12,7 +12,12 @@ spec's sketch left implicit:
 from __future__ import annotations
 
 import operator
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Any, Literal
+
+# TypedDict comes from typing_extensions, not typing: pydantic (which validates
+# the graph state) rejects typing.TypedDict on Python < 3.12, and the backend
+# image targets 3.11.
+from typing_extensions import Annotated, TypedDict
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages

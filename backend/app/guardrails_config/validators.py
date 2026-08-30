@@ -53,11 +53,16 @@ _SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     (
         "hardcoded credential assignment",
         re.compile(
+            # The name boundaries are lookarounds, not \b: \b does not fire
+            # between an underscore and a letter, so \bpassword\b would miss
+            # DB_PASSWORD and check_password - the names real code actually uses.
             r"""(?ix)
-            \b(?:password|passwd|pwd|secret|api[_-]?key|apikey|access[_-]?token|
-               auth[_-]?token|client[_-]?secret|private[_-]?key)\b
+            (?<![A-Za-z0-9])
+            (?:password|passwd|pwd|secret|api[_-]?key|apikey|access[_-]?token|
+               auth[_-]?token|client[_-]?secret|private[_-]?key)
+            (?![A-Za-z0-9])
             \s*[:=]\s*
-            (['"])(?!\s*$)(?![A-Za-z_][A-Za-z0-9_]*\s*\1)   # skip empty / bare identifiers
+            (['"])(?!\s*$)
             (?P<value>[^'"\n]{6,})\1
             """
         ),

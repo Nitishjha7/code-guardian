@@ -13,7 +13,7 @@ that did have a vulnerability. Three mitigations live here:
    criteria rather than prose descriptions.
 2. ``force_full_audit`` — a caller-supplied override that bypasses routing
    entirely for high-stakes paths (anything touching auth or database code).
-3. ``_looks_high_stakes`` — a cheap static backstop that flips the override on
+3. ``looks_high_stakes`` — a cheap static backstop that flips the override on
    when the input obviously touches an auth or DB surface, so the recall risk
    does not depend solely on the caller remembering to set the flag.
 """
@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import re
+from contextvars import ContextVar
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import tool
@@ -32,12 +33,18 @@ from . import performance_agent, security_agent
 # Set by the graph before each run so the tools can see the code without the
 # supervisor having to echo an entire diff back through its own tool arguments
 # (which would cost the input tokens twice and risk the model truncating it).
-_CURRENT: dict[str, str] = {"source_code": "", "language": "python"}
+#
+# A ContextVar rather than a plain module global: the API serves concurrent
+# requests, and a global dict would let two simultaneous reviews audit each
+# other's code. ContextVars are copied into the context LangGraph runs each node
+# in, so every review sees its own submission.
+_CURRENT_INPUT: ContextVar[tuple[str, str]] = ContextVar(
+    "code_guardian_current_input", default=("", "python")
+)
 
 
 def set_current_input(source_code: str, language: str) -> None:
-    _CURRENT["source_code"] = source_code
-    _CURRENT["language"] = language
+    _CURRENT_INPUT.set((source_code, language))
 
 
 @tool
@@ -54,7 +61,8 @@ def security_audit() -> str:
 
     Returns a JSON array of findings with severity ratings.
     """
-    findings = security_agent.audit(_CURRENT["source_code"], _CURRENT["language"])
+    source_code, language = _CURRENT_INPUT.get()
+    findings = security_agent.audit(source_code, language)
     return json.dumps(findings)
 
 
@@ -71,7 +79,8 @@ def performance_audit() -> str:
 
     Returns a JSON array of findings with Big-O before/after where applicable.
     """
-    findings = performance_agent.audit(_CURRENT["source_code"], _CURRENT["language"])
+    source_code, language = _CURRENT_INPUT.get()
+    findings = performance_agent.audit(source_code, language)
     return json.dumps(findings)
 
 
@@ -93,12 +102,23 @@ Once the tool results are back, do not call anything else and do not summarise
 the findings. Reply with a single short sentence naming which auditors you ran
 and why. Another node handles the report."""
 
-_HIGH_STAKES = re.compile(
-    r"\b(password|passwd|secret|token|api[_-]?key|credential|auth|login|signin|"
-    r"session|jwt|oauth|permission|role|admin|sql|select\s+.*\bfrom\b|insert\s+into|"
-    r"update\s+.*\bset\b|delete\s+from|execute|cursor|query|db\.|database|"
-    r"subprocess|os\.system|eval|exec|pickle)\b",
+# Identifier-shaped terms. The boundaries are lookarounds rather than ``\b``
+# because ``\b`` does not fire between an underscore and a letter, which would
+# miss exactly the names real code uses: DB_PASSWORD, check_password, api_key.
+_HIGH_STAKES_TERMS = re.compile(
+    r"(?<![A-Za-z0-9])(?:"
+    r"password|passwd|pwd|secret|token|api[_-]?key|apikey|credential|auth|"
+    r"login|signin|session|jwt|oauth|permission|role|admin|sql|cursor|query|"
+    r"execute|database|subprocess|eval|exec|pickle|deserialize|hashlib"
+    r")(?![A-Za-z0-9])",
     re.IGNORECASE,
+)
+
+# Phrase- and symbol-shaped patterns, which cannot carry the same boundaries.
+_HIGH_STAKES_PHRASES = re.compile(
+    r"select\s+.+?\bfrom\b|insert\s+into|update\s+.+?\bset\b|delete\s+from|"
+    r"\bdb\.|os\.system|os\.popen|\.raw\(|request\.(?:args|form|json|body)",
+    re.IGNORECASE | re.DOTALL,
 )
 
 
@@ -108,7 +128,8 @@ def looks_high_stakes(source_code: str) -> bool:
     Deliberately over-inclusive: a false positive here costs one extra audit,
     a false negative costs a missed vulnerability.
     """
-    return bool(_HIGH_STAKES.search(source_code or ""))
+    text = source_code or ""
+    return bool(_HIGH_STAKES_TERMS.search(text) or _HIGH_STAKES_PHRASES.search(text))
 
 
 def _forced_fan_out() -> AIMessage:
