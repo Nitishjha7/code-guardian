@@ -4,9 +4,25 @@
 
 Code Guardian is a multi-agent code auditing platform. It coordinates specialized LangGraph agents — Security, Performance, and Patch Generator — to review code or pull requests, flag vulnerabilities and inefficiencies, and autonomously generate production-ready fixes, all validated through Guardrails AI before being posted back as a GitHub PR review.
 
+> ## ⚠️ Status: design complete, implementation not started
+>
+> Every file under `backend/app/` is currently an empty scaffold. This README and
+> the technical spec describe the **intended** system — they are a design
+> document, not a description of running code.
+>
+> | Piece | State |
+> |---|---|
+> | Docs (README, spec, setup, build & deploy guide) | ✅ complete |
+> | Repo scaffold, `docker-compose.yml` | ✅ complete |
+> | LangGraph agents, tool-calling supervisor, FastAPI, frontend | ❌ not written |
+>
+> Build order is in [docs/BUILD_AND_DEPLOY.md](docs/BUILD_AND_DEPLOY.md). Until
+> Phase 1 lands, do not present this as a working project — describe it as designed
+> and in progress.
+
 ## Tech Stack
 
-- **Agent Orchestrator**: LangGraph (StateGraph) — supervisor pattern, fan-out analysis, state reducer, edge routing
+- **Agent Orchestrator**: LangGraph (StateGraph) — supervisor pattern built as an LLM **tool-calling router** (`bind_tools` + `ToolNode`): the model decides which specialists a given diff actually needs, instead of a fixed fan-out. Parallel tool execution, state reducers, conditional edge routing. See [§3a of the spec](docs/TECHNICAL_SPEC.md)
 - **LLM Engine**: LangChain + Groq (Llama 3.3 70B / Claude / Gemini)
 - **Safety & Guardrails**: Guardrails AI (secrets scanning, toxic-language guard)
 - **Tooling Layer**: GitHub MCP Server / PyGithub (Model Context Protocol)

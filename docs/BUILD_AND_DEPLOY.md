@@ -11,6 +11,7 @@ Main purpose: **interview me project dikhana**. Isliye depth + explainability zy
 ### 1. Core (zaroor banao, well-polished)
 
 - **LangGraph multi-agent graph** — Security Agent + Performance Agent + Patch Generator, properly connected via `StateGraph`. Ye interview ka sabse important part hai.
+- **Tool-calling supervisor** — Supervisor ko fixed fan-out mat banao. Specialists ko `@tool` banao, `llm.bind_tools([...])` se supervisor ko bind karo, phir `ToolNode` + conditional edge se loop. **Ye is project ka sabse differentiating piece hai** — poore portfolio me yahi ek jagah hai jahan **LLM khud** control flow decide karta hai (baaki dono projects me LangGraph ke edges decide karte hain). "ReAct-style / tool calling banaya hai?" agentic AI interview ka common sawaal hai — iske bina jawab "nahi" hota hai. Detail + defence [TECHNICAL_SPEC.md §3a](TECHNICAL_SPEC.md) me hai.
 - **FastAPI backend** — `/api/review` endpoint jo code accept kare aur graph trigger kare.
 - **React UI** — simple code textarea/Monaco editor + "Review" button + result cards (security issues, performance issues, patch diff).
 - **Guardrails AI integration** — output diffs/comments me secrets leak na ho, ye validate karo. Interview me "production-thinking" dikhata hai.
@@ -31,6 +32,9 @@ Ye sab already [TECHNICAL_SPEC.md](TECHNICAL_SPEC.md) ke "Future Phases" section
 ## Interview me kaise present karo
 
 - **"Kyun multi-agent (single LLM prompt kyun nahi)?"** — specialization/accuracy ka reasoning ready rakho: ek generalist prompt security aur performance dono deeply audit nahi kar pata, alag agents zyada focused/accurate hote hain.
+- **"Supervisor har baar dono agents chalata hai?"** — Nahi. Supervisor ek tool-calling LLM hai; wo decide karta hai kis diff ko kaunsa audit chahiye. Pure CSS diff pe security surface hai hi nahi, config change me algorithmic complexity nahi hoti — static fan-out har submission pe poora cost deta hai. Aur naye agents add karna sirf ek naya `@tool` likhna hai, edges rewire karna nahi.
+- **"Router galat decide kare toh?"** — Ye khud se bolo, ye maturity dikhata hai: false negative (security audit skip ho gaya jabki vulnerability thi) wasted tokens se kahin bura hai. Teen mitigation: `temperature=0` + docstrings ko routing *criteria* ki tarah likhna, high-stakes paths (auth/DB touch karne wale diffs) pe forced-fan-out override flag, aur labelled snippets ka eval set jo **recall** measure kare.
+- **"ReAct-style tool calling banaya hai?"** — Haan, yahi wo project hai. Aur ye bhi bolo ki *kyun* sirf yahan: SQL agent me control flow deterministic hona chahiye (DB error se decide hota hai, model se nahi), yahan model ka judgement hi routing signal hai. Dono pattern jaante ho, aur kab kaunsa use karna hai wo bhi — yahi asli answer hai.
 - Ek tricky design decision explain karne ke liye ready raho — jaise Guardrails kyun use kiya (secrets leak prevent karna), ya LangGraph state design kyun aisa rakha.
 - **Live demo ready rakho**: vulnerable code paste karo (e.g. SQL injection wala snippet) → dikhao Security Agent flag karta hai → Patch Generator fix suggest karta hai.
 
