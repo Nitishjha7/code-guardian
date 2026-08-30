@@ -1,0 +1,21 @@
+# --- Core agent orchestration ---
+langgraph==0.2.62
+langchain-core==0.3.29
+langchain-groq==0.2.3
+
+# --- API layer ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.5
+pydantic-settings==2.7.1
+python-dotenv==1.0.1
+
+# --- Phase 2 (GitHub PR bot) ---
+PyGithub==2.5.0
+httpx==0.28.1
+
+# --- Guardrails ---
+# guardrails-ai is optional and heavy (pulls torch for some validators).
+# app/guardrails_config falls back to a local regex secrets scanner when it is
+# absent, so the stack runs without it. Install to enable the full validator set:
+#   pip install "guardrails-ai==0.6.1"
