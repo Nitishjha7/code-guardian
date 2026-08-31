@@ -6,18 +6,20 @@ command points at: ``uvicorn app.main:app``.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Literal
 
 import anyio
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
-from . import __version__
+from . import __version__, pr_bot
 from .config import get_settings
 from .graph import run_review
 from .guardrails_config import validators
+from .mcp_clients import github_client
 
 logger = logging.getLogger("code_guardian")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -111,6 +113,12 @@ def health() -> dict[str, Any]:
         "model": settings.guardian_model,
         "groq_key_configured": bool(settings.groq_api_key),
         "guardrails": validators.describe(),
+        "pr_bot": {
+            # Both must be true for the webhook to do anything: without the
+            # secret it refuses deliveries, without the token it cannot comment.
+            "github_token_configured": bool(settings.github_token),
+            "webhook_secret_configured": bool(settings.github_webhook_secret),
+        },
     }
 
 
@@ -159,6 +167,57 @@ async def review(request: ReviewRequest) -> ReviewResponse:
         guardrail_report=state.get("guardrail_report", {}),
         logs=state.get("logs", []),
     )
+
+
+@app.post("/webhook/github", status_code=202)
+async def github_webhook(
+    request: Request,
+    background: BackgroundTasks,
+    x_hub_signature_256: str | None = Header(default=None),
+    x_github_event: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """GitHub pull-request webhook (Phase 2).
+
+    Returns 202 immediately and reviews in the background: a full review takes
+    several seconds per file, and GitHub abandons a webhook delivery after 10.
+    Doing the work inline would make every non-trivial PR look like a failed
+    delivery in the repository's webhook log.
+    """
+    body = await request.body()
+    settings = get_settings()
+
+    ok, reason = pr_bot.verify_signature(
+        settings.github_webhook_secret, body, x_hub_signature_256
+    )
+    if not ok:
+        logger.warning("Rejected webhook delivery: %s", reason)
+        # 401 for a bad or missing signature; 503 when the server itself has no
+        # secret configured, since that is our misconfiguration, not the sender's.
+        status = 503 if "not configured" in reason else 401
+        raise HTTPException(status_code=status, detail=reason)
+
+    if x_github_event == "ping":
+        return {"status": "pong"}
+    if x_github_event != "pull_request":
+        return {"status": "ignored", "reason": f"event '{x_github_event}' is not handled"}
+
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="body is not valid JSON") from exc
+
+    ref = github_client.parse_pull_request_event(payload)
+    if ref is None:
+        return {"status": "ignored", "reason": "not an actionable pull request update"}
+
+    background.add_task(pr_bot.review_pull_request, ref)
+    logger.info("Queued review for %s#%s (%s)", ref.repo_full_name, ref.number, ref.action)
+    return {
+        "status": "queued",
+        "repository": ref.repo_full_name,
+        "pull_request": ref.number,
+        "action": ref.action,
+    }
 
 
 @app.get("/api/graph")

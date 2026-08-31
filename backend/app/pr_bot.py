@@ -1,0 +1,192 @@
+"""Phase 2: the GitHub pull-request bot.
+
+Flow: webhook -> signature check -> event filter -> (background) review each
+changed file -> one aggregated comment on the PR.
+
+The review itself is the same graph Phase 1 uses. Nothing about the agents
+changes for a PR; only the input source and the output sink do.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import logging
+
+from .config import get_settings
+from .graph import run_review
+from .mcp_clients.github_client import (
+    ChangedFile,
+    GitHubClient,
+    PostResult,
+    PullRequestRef,
+    added_lines,
+)
+
+logger = logging.getLogger("code_guardian.pr_bot")
+
+# A PR touching auth or database code is exactly the high-stakes path §3a
+# describes, but the bot cannot know that per-file in advance, so it relies on
+# the supervisor's own backstop rather than forcing a full audit on everything.
+MAX_FILES = 10
+
+
+def verify_signature(secret: str, body: bytes, signature_header: str | None) -> tuple[bool, str]:
+    """Validate GitHub's ``X-Hub-Signature-256`` header.
+
+    Returns ``(ok, reason)``. This **fails closed**: if no secret is configured
+    the request is rejected rather than trusted. An unauthenticated webhook
+    endpoint that runs LLM calls and writes comments to your repositories is a
+    denial-of-wallet and a spam vector, and "I forgot to set the secret" must
+    not silently become "anyone on the internet can drive this bot".
+    """
+    if not secret:
+        return False, (
+            "GITHUB_WEBHOOK_SECRET is not configured; refusing to process "
+            "unauthenticated webhook deliveries."
+        )
+    if not signature_header:
+        return False, "missing X-Hub-Signature-256 header"
+
+    algorithm, _, sent = signature_header.partition("=")
+    if algorithm != "sha256" or not sent:
+        return False, "malformed X-Hub-Signature-256 header"
+
+    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    # compare_digest, not ==: a plain comparison leaks the correct prefix length
+    # through timing and turns the secret into a guessable one byte at a time.
+    if not hmac.compare_digest(expected, sent):
+        return False, "signature mismatch"
+    return True, ""
+
+
+def _render_pr_comment(ref: PullRequestRef, results: list[tuple[ChangedFile, dict]]) -> str:
+    """Aggregate per-file reviews into one PR comment."""
+    total_security = sum(len(r.get("security_issues") or []) for _, r in results)
+    total_performance = sum(len(r.get("performance_issues") or []) for _, r in results)
+    failed = [
+        (f.filename, r.get("failed_audits") or [])
+        for f, r in results
+        if r.get("failed_audits")
+    ]
+
+    lines = ["## Code Guardian review", ""]
+
+    if failed:
+        lines += [
+            "> **This review is incomplete.** One or more audits failed to run, "
+            "so the results below are not a clean bill of health:",
+            "",
+        ]
+        for filename, audits in failed:
+            lines.append(f"> - `{filename}`: {', '.join(audits)}")
+        lines.append("")
+
+    lines += [
+        f"Reviewed **{len(results)} file(s)** · "
+        f"**{total_security} security** / **{total_performance} performance** finding(s).",
+        "",
+    ]
+
+    if not total_security and not total_performance and not failed:
+        lines += ["No issues found in the added lines of this PR.", ""]
+
+    for changed, result in results:
+        security = result.get("security_issues") or []
+        performance = result.get("performance_issues") or []
+        routed = result.get("routed_to") or []
+        file_failed = result.get("failed_audits") or []
+
+        if not security and not performance and not file_failed:
+            continue
+
+        lines += [f"### `{changed.filename}`", ""]
+        if file_failed:
+            lines += [
+                f"**Audit failed ({', '.join(file_failed)}) - this file was not fully checked.**",
+                "",
+            ]
+        if routed:
+            lines += [
+                "_Auditors run: " + ", ".join(r.replace("_", " ") for r in routed) + "._",
+                "",
+            ]
+
+        for finding in security + performance:
+            severity = finding.get("severity", "Medium")
+            title = finding.get("title", "Untitled finding")
+            lines.append(f"- **[{severity}] {title}**")
+            if finding.get("line_hint"):
+                lines.append(f"  - `{finding['line_hint']}`")
+            if finding.get("explanation"):
+                lines.append(f"  - {finding['explanation']}")
+            if finding.get("recommendation"):
+                lines.append(f"  - _Fix:_ {finding['recommendation']}")
+        lines.append("")
+
+        diff = result.get("diff") or ""
+        if diff:
+            lines += ["<details><summary>Suggested patch</summary>", "", "```diff",
+                      diff.rstrip("\n"), "```", "", "</details>", ""]
+
+    lines.append(
+        "<sub>Generated by Code Guardian on the lines this PR adds. "
+        "Review before merging.</sub>"
+    )
+    return "\n".join(lines)
+
+
+def review_pull_request(ref: PullRequestRef) -> PostResult:
+    """Review a PR and post the result. Runs in a background task."""
+    settings = get_settings()
+    try:
+        client = GitHubClient(settings.github_token)
+    except RuntimeError as exc:
+        logger.error("PR bot misconfigured: %s", exc)
+        return PostResult(posted=False, reason=str(exc))
+
+    try:
+        files = client.changed_files(ref.repo_full_name, ref.number, limit=MAX_FILES)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Could not read PR files")
+        return PostResult(posted=False, reason=f"could not read PR files: {exc}")
+
+    if not files:
+        logger.info(
+            "PR %s#%s: no reviewable files, skipping", ref.repo_full_name, ref.number
+        )
+        return PostResult(posted=False, reason="no reviewable files in this PR")
+
+    results: list[tuple[ChangedFile, dict]] = []
+    for changed in files:
+        snippet = added_lines(changed.patch)
+        if not snippet.strip():
+            continue
+        try:
+            state = run_review(source_code=snippet, language=changed.language)
+        except Exception as exc:  # noqa: BLE001
+            # One bad file must not sink the whole review; record it as a failed
+            # audit so the comment says so rather than omitting the file silently.
+            logger.exception("Review failed for %s", changed.filename)
+            state = {
+                "failed_audits": ["security_audit", "performance_audit"],
+                "audit_errors": [f"{changed.filename}: {exc}"],
+            }
+        results.append((changed, state))
+
+    if not results:
+        return PostResult(posted=False, reason="no added lines to review")
+
+    body = _render_pr_comment(ref, results)
+    try:
+        url = client.post_comment(ref.repo_full_name, ref.number, body)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Could not post PR comment")
+        return PostResult(posted=False, reason=f"could not post comment: {exc}")
+
+    logger.info("PR %s#%s reviewed: %s", ref.repo_full_name, ref.number, url)
+    return PostResult(
+        posted=True,
+        comment_url=url,
+        reviewed_files=[f.filename for f, _ in results],
+    )
