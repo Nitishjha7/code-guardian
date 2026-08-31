@@ -36,7 +36,18 @@ Ye sab already [TECHNICAL_SPEC.md](TECHNICAL_SPEC.md) ke "Future Phases" section
 - **"Router galat decide kare toh?"** — Ye khud se bolo, ye maturity dikhata hai: false negative (security audit skip ho gaya jabki vulnerability thi) wasted tokens se kahin bura hai. Teen mitigation: `temperature=0` + docstrings ko routing *criteria* ki tarah likhna, high-stakes paths (auth/DB touch karne wale diffs) pe forced-fan-out override flag, aur labelled snippets ka eval set jo **recall** measure kare.
 - **"ReAct-style tool calling banaya hai?"** — Haan, yahi wo project hai. Aur ye bhi bolo ki *kyun* sirf yahan: SQL agent me control flow deterministic hona chahiye (DB error se decide hota hai, model se nahi), yahan model ka judgement hi routing signal hai. Dono pattern jaante ho, aur kab kaunsa use karna hai wo bhi — yahi asli answer hai.
 - Ek tricky design decision explain karne ke liye ready raho — jaise Guardrails kyun use kiya (secrets leak prevent karna), ya LangGraph state design kyun aisa rakha.
-- **Live demo ready rakho**: vulnerable code paste karo (e.g. SQL injection wala snippet) → dikhao Security Agent flag karta hai → Patch Generator fix suggest karta hai.
+- **Live demo ready rakho**: vulnerable code paste karo (e.g. SQL injection wala snippet) → dikhao Security Agent flag karta hai → Patch Generator fix suggest karta hai. Phir CSS sample chalao — router dono auditors skip kar deta hai, ~0.9s vs ~6.4s. Ye contrast hi §3a ka poora argument hai, bolne se zyada asar karta hai.
+- **"Agent fail ho jaye toh pata kaise chalega?"** — ye sawaal aa sakta hai, aur iska jawab tumhare paas actually code me hai: "did not run" aur "ran and found nothing" alag states hain (`failed_audits`), aur failed audit kabhi "No issues found" print nahi karta. Neeche implementation notes me detail hai.
+
+### Groq model ids die — check before you demo
+
+`llama-3.3-70b-versatile` (jo original spec me likha tha) ab Groq pe exist nahi karta; 404 deta hai. Demo se pehle ye chala lo:
+
+```bash
+curl https://api.groq.com/openai/v1/models -H "Authorization: Bearer $GROQ_API_KEY"
+```
+
+Jo id mile wahi `GUARDIAN_MODEL` me daalo. Abhi default `openai/gpt-oss-120b` hai (tool calling support karta hai, zaroori hai — supervisor isi pe chalta hai).
 
 ## Build Order (status)
 
@@ -50,8 +61,22 @@ Ye sab already [TECHNICAL_SPEC.md](TECHNICAL_SPEC.md) ke "Future Phases" section
 
 ### Implementation notes worth knowing before the interview
 
-Three places where the code deliberately departs from the naive reading of the
+Four places where the code deliberately departs from the naive reading of the
 spec. Each is a decision you should be able to defend, not an accident:
+
+- **A failed audit is never rendered as "no issues found".** This one is worth
+  leading with, because it was a real bug caught during testing. The audits are
+  tools, and LangGraph's `ToolNode` turns an uncaught exception into a plain
+  ToolMessage — so when the Groq model id was retired and every audit 404'd, the
+  system happily reported **0 findings on code with a Critical SQL injection**.
+  For an auditing tool that is the worst possible failure: silence is
+  indistinguishable from a pass. Fixed by having each tool return a
+  `{"ok": bool, ...}` envelope, tracking `failed_audits` / `audit_errors` in
+  state, and refusing to print "No issues found" for an audit that never ran —
+  the report leads with an "incomplete review" banner instead. Four tests pin
+  this behaviour down. Good interview answer to *"how do you know your agent
+  actually worked?"*: you don't, unless you make "did not run" a distinct state
+  from "ran and found nothing."
 
 - **The diff is computed with `difflib`, not asked for from the LLM.** Models
   emit unified diffs with wrong hunk headers and line counts constantly, and
@@ -75,7 +100,7 @@ spec. Each is a decision you should be able to defend, not an accident:
 `backend/tests/` covers the LLM-free seams — JSON recovery from messy model
 output, diff generation, the conditional-edge routing predicate, the state
 collector (including a malformed tool result), and every guardrail pattern.
-21 tests, no API key needed. There is **no** end-to-end test against a live
+24 tests, no API key needed. There is **no** automated end-to-end test against a live
 model; the agent prompts are unvalidated until you run a real review.
 
 ---

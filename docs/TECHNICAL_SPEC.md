@@ -16,7 +16,7 @@ Manual peer code reviews are often slow and frequently miss subtle vulnerabiliti
 | Component | Technology | Role in System |
 |---|---|---|
 | Agent Orchestrator | LangGraph (StateGraph) | Multi-agent supervisor pattern — an LLM-driven **tool-calling router** (`bind_tools` + `ToolNode`) that selects specialists at runtime, with parallel execution, state reducers, and conditional edge routing. See §3a. |
-| LLM Engine | LangChain + Groq (Llama 3.3 70B / Claude / Gemini) | Inference engine powering specialized security, performance, and remediation agents. |
+| LLM Engine | LangChain + Groq (`openai/gpt-oss-120b` default, set via `GUARDIAN_MODEL`) | Inference engine powering the security, performance, and remediation agents. Groq retires model ids over time — check `/v1/models` before pinning one. |
 | Safety & Guardrails | Guardrails AI (Secrets & Toxic Guards) | Scans output diffs to prevent API key leaks and validates tone of automated PR comments. |
 | Tooling Layer (MCP) | GitHub MCP Server / PyGithub | Model Context Protocol client fetching PR metadata, changed files, and posting review comments. |
 | Backend API | FastAPI (Asynchronous) | Provides webhook listener for GitHub PR events and REST endpoints for UI interaction. |

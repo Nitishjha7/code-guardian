@@ -15,19 +15,24 @@ Code Guardian is a multi-agent code auditing platform. It coordinates specialize
 > | Docker images + Compose stack | ✅ builds and runs |
 > | Phase 2: GitHub webhook + MCP client (`app/mcp_clients/`) | ❌ not started |
 >
-> **What has actually been verified:** 21 backend unit tests pass; the frontend
-> production build succeeds; both images build; the API serves `/api/health` and
-> `/api/graph` (the compiled topology matches the spec), and correctly returns
-> 503/502/429 when the LLM key is missing, rejected, or rate limited.
-> **Not yet verified end-to-end:** a full review against a live Groq key — the
-> agent prompts have not been run against the real model. Do that first
-> (`Quick start` below) before demoing.
+> **Verified end-to-end against a live Groq key:**
+>
+> | Check | Result |
+> |---|---|
+> | 24 backend unit tests | pass |
+> | Frontend production build | pass |
+> | Compose stack (nginx → backend) | `/api/health` + `/api/review` both 200 |
+> | Vulnerable Python sample | 3 security + 4 performance findings, 80-line patch, 6.4s |
+> | Plain CSS sample | router skipped both auditors, 0.9s |
+> | Slow JS sample | router chose performance only, flagged O(u×e) → O(u+e) |
+> | Failed audit (dead model id) | reported as **"Audit failed — this code was not checked"**, never as clean |
+> | Missing / rejected / rate-limited key | 503 / 502 / 429 |
 
 ## Tech Stack
 
 - **Agent Orchestrator**: LangGraph (StateGraph) — supervisor pattern built as an LLM **tool-calling router** (`bind_tools` + `ToolNode`): the model decides which specialists a given diff actually needs, instead of a fixed fan-out. Parallel tool execution, state reducers, conditional edge routing. See [§3a of the spec](docs/TECHNICAL_SPEC.md)
-- **LLM Engine**: LangChain + Groq (Llama 3.3 70B / Claude / Gemini)
-- **Safety & Guardrails**: Guardrails AI (secrets scanning, toxic-language guard)
+- **LLM Engine**: LangChain + Groq (`openai/gpt-oss-120b` by default; any tool-calling model your key can see, set via `GUARDIAN_MODEL`)
+- **Safety & Guardrails**: secrets scanning + tone guard on every outbound diff, patch and comment. Guardrails AI is used when installed; the default is a local pattern scanner, and `guardrail_report.engine` always names which one ran — see [Build & Deploy](docs/BUILD_AND_DEPLOY.md) for why
 - **Tooling Layer**: GitHub MCP Server / PyGithub (Model Context Protocol)
 - **Backend**: FastAPI (async), webhook listener + REST API
 - **Frontend**: React, Tailwind CSS, Monaco Editor
@@ -60,11 +65,12 @@ docker compose up --build
 ```
 
 - UI: http://localhost:3000
-- API: http://localhost:8000/api/health (interactive docs at `/docs`)
+- API: http://localhost:8010/api/health (interactive docs at `/docs`)
 
-If port 8000 is taken on your machine, change the host side of the backend's
-`ports:` mapping in `docker-compose.yml` (e.g. `"8010:8000"`); the frontend
-reaches the backend over the compose network, so nothing else needs updating.
+The backend is published on host port **8010** (`"8010:8000"` in
+`docker-compose.yml`) because 8000 is commonly already taken. Change that host
+side if you prefer another port; the frontend reaches the backend over the
+compose network, so nothing else needs updating.
 
 ### Running without Docker
 
@@ -98,15 +104,21 @@ docker build -f backend/Dockerfile.test -t code-guardian-test backend && docker 
 The UI ships three samples (top-left dropdown) chosen to make the router's
 decision visible:
 
-| Sample | Expected behaviour |
+| Sample | Observed behaviour |
 |---|---|
-| Vulnerable Python (SQLi + N+1) | Both auditors run; Critical SQL injection, hardcoded password, MD5 password hashing, N+1 query loop; patch parameterizes the queries |
-| Plain CSS | Router skips the security audit entirely — the "not run" state in the UI is the point |
-| Slow JavaScript | Performance audit flags the O(n²) join and proposes a Map lookup |
+| Vulnerable Python (SQLi + N+1) | Both auditors run (the high-stakes backstop forces them). Critical SQL injection, High hardcoded password, Medium MD5 hashing; N+1 queries `O(n)` → `O(1)`, missing index, unclosed connection. 80-line patch. **~6.4s** |
+| Plain CSS | Router calls **no auditor at all** and the UI shows both sections as "not run". **~0.9s** — the cost difference *is* the demo |
+| Slow JavaScript | Router calls **performance only**; flags the quadratic join `O(u × e)` → `O(u + e)` |
 
-The "Force full audit" checkbox is the §3a override: it bypasses routing and
-runs every auditor, for high-stakes paths where a false negative is worse than
-wasted tokens.
+Two things to show beyond the findings:
+
+- **The "Force full audit" checkbox** — the §3a override. It bypasses routing
+  and runs every auditor, for high-stakes paths where a false negative is worse
+  than wasted tokens.
+- **The failure banner.** Set `GUARDIAN_MODEL` to a nonsense id and re-run: the
+  review comes back marked *"This review is incomplete — audit failed, this code
+  was not checked"*, not as a clean pass. An auditing tool that silently reports
+  "no issues" when it never ran is worse than no tool, so that path is tested.
 
 ## Docs
 
