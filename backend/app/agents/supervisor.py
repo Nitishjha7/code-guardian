@@ -86,12 +86,19 @@ def security_audit() -> str:
 def performance_audit() -> str:
     """Audit the submitted code for runtime and resource cost.
 
-    Call this when the code contains loops, recursion, collection processing,
-    database or network calls, file or stream handling, or any computation whose
-    cost grows with input size.
+    Call this whenever the code contains ANY of the following, even if it also
+    has a security problem - the two audits are independent and both should run:
+      - a loop, comprehension, `.map`/`.filter`/`.forEach`, or recursion
+      - a loop or comprehension nested inside another, or a lookup performed
+        inside a loop (including a query, `.filter()` or `.find()` per item)
+      - building a string, list or dict incrementally across iterations
+      - opening a file, socket, cursor or connection
+      - a database or network call of any kind
+      - sorting, or any operation whose cost grows with the size of the input
 
-    Do NOT call this for pure configuration files, static markup, styling, or
-    declarative data with no execution.
+    Do NOT call this for pure configuration files, static markup, styling,
+    declarative data, or straight-line code with no loop, no I/O and no
+    collection processing.
 
     Returns a JSON envelope with the findings and Big-O before/after where
     applicable.
@@ -110,8 +117,12 @@ You have two auditors available as tools. Read their descriptions as routing
 criteria and call every tool whose criteria the submission meets — one, both, or
 neither. Call them in a single turn so they run in parallel.
 
-Bias: when you are genuinely unsure whether the security criteria are met, call
-the security auditor. A missed vulnerability costs far more than a wasted audit.
+The auditors are independent. Code that has a security problem very often also
+has a performance problem; finding one is never a reason to skip the other. Judge
+each tool's criteria on its own and call both when both are met.
+
+Bias: when you are genuinely unsure whether a tool's criteria are met, call it.
+A missed vulnerability costs far more than a wasted audit.
 
 Once the tool results are back, do not call anything else and do not summarise
 the findings. Reply with a single short sentence naming which auditors you ran
