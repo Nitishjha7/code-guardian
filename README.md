@@ -21,6 +21,7 @@ Code Guardian is a multi-agent code auditing platform. It coordinates specialize
 > | Check | Result |
 > |---|---|
 > | 50 backend unit tests | pass |
+> | Routing eval, 20 labelled cases | security recall **100%** (0 false negatives); performance recall 50% |
 > | Frontend production build | pass |
 > | Compose stack (nginx → backend) | `/api/health` + `/api/review` both 200 |
 > | Vulnerable Python sample | 3 security + 4 performance findings, 80-line patch, 6.4s |
@@ -56,6 +57,7 @@ backend/app/guardrails_config/ # Secrets + tone validators on all outbound text
 backend/app/pr_bot.py          # Phase 2: HMAC verification + PR review orchestration
 backend/app/mcp_clients/       # GitHub client (PyGithub): PR diffs, comments
 backend/tests/                 # 50 unit tests for the LLM-free seams
+backend/evals/                 # 20 labelled snippets measuring routing recall
 frontend/src/                  # React + Monaco review dashboard
 docs/                          # Setup, technical spec, build & deploy
 ```
@@ -127,6 +129,53 @@ Two things to show beyond the findings:
   review comes back marked *"This review is incomplete — audit failed, this code
   was not checked"*, not as a clean pass. An auditing tool that silently reports
   "no issues" when it never ran is worse than no tool, so that path is tested.
+
+## Routing eval — does the router actually work?
+
+§3a of the spec argues the supervisor should route instead of fanning out, and
+names the risk: a false negative (skipping the security audit on code that
+needed one) is far worse than the tokens a static fan-out would have wasted.
+`backend/evals/` turns that from a claim into a number — 20 labelled snippets,
+each marked for whether a competent reviewer would consider each audit worth
+paying for.
+
+```bash
+cd backend && python -m evals.run_routing_eval
+# or: docker build -f backend/Dockerfile.eval -t cg-eval backend \
+#     && docker run --rm --env-file backend/.env cg-eval
+```
+
+Measured on `openai/gpt-oss-120b`, 20 cases:
+
+| Mode | Security recall | Security precision | Performance recall | Performance precision |
+|---|---|---|---|---|
+| `router-only` (LLM judgement alone) | **100%** | 83% | 50% | 100% |
+| `as-shipped` (router + high-stakes backstop) | **100%** | 83% | 67% | 33% |
+
+Read honestly, that says three things:
+
+- **Security recall is 100% — zero missed security audits.** This is the number
+  the design stakes itself on, and it holds with and without the backstop.
+- **Performance recall is the weak spot (50% router-only).** On three snippets
+  the model called the security auditor on code whose only real problem was
+  performance. That is a genuine limitation, not a rounding error. It is
+  tolerable only because the errors are asymmetric: a missed performance audit
+  costs an optimization suggestion, a missed security audit costs a
+  vulnerability. It is measured rather than hidden, which is the point.
+- **The backstop trades precision for safety, visibly.** It lifts performance
+  recall to 67% but drops precision to 33% — it fires on anything with an
+  auth/DB/exec keyword and pays for a performance audit that often finds
+  nothing. That is the intended trade (a false positive costs cents), and now
+  the cost is quantified rather than assumed.
+
+The exit code fails when as-shipped security recall drops below 100%
+(`--min-security-recall`), so a prompt or model change that quietly breaks
+routing fails the way a test does.
+
+> **Caveat, stated plainly:** these 20 cases were used to *tune* the tool
+> docstrings (performance recall went 33% → 50% that way), so the numbers are
+> optimistic — the set is not held out. A fresh set would score lower. To use
+> this as a real regression gate, write new cases and do not tune against them.
 
 ## GitHub PR bot (Phase 2)
 
