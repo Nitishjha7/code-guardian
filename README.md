@@ -233,10 +233,17 @@ curl -X POST http://localhost:8010/webhook/github \
 
 ## Roadmap
 
-Development is split into 2 core phases, with advanced phases beyond — see [docs/TECHNICAL_SPEC.md](docs/TECHNICAL_SPEC.md) for full details:
+| # | Phase | State |
+|---|---|---|
+| 1 | **Local Code Review Studio** — LangGraph nodes, tool-calling supervisor, `/api/review`, React UI | ✅ done |
+| 2 | **GitHub PR Bot** — webhook-triggered reviews posted as PR comments | ✅ done |
+| 3 | Advanced Intelligence Layer — Code Quality, Test Coverage, Dependency/License, Documentation agents | roadmap |
+| 4 | Learning & Memory — feedback loop, team-specific rules, historical PR analysis | roadmap |
+| 5 | CI/CD Integration — auto-block merge, chat notifications, auto-ticketing | roadmap |
 
-1. Local Code Review Studio — LangGraph nodes, FastAPI `/api/review` endpoint, React UI
-2. GitHub PR Bot & MCP Integration — webhook-triggered reviews posted directly as PR comments
-3. Advanced Intelligence Layer — Code Quality, Test Coverage, Dependency/License, Documentation agents
-4. Learning & Memory — feedback loop, team-specific rules, historical PR analysis
-5. CI/CD Integration — auto-block merge, chat notifications, auto-ticketing
+Phases 3–5 are deliberately not built. Adding a Phase 3 agent is one more
+`@tool` with a clear docstring — the graph topology does not change, which is
+the whole point of the supervisor pattern (§3a). Depth over breadth was the
+explicit call; see [docs/BUILD_AND_DEPLOY.md](docs/BUILD_AND_DEPLOY.md).
+
+Full details in [docs/TECHNICAL_SPEC.md](docs/TECHNICAL_SPEC.md).

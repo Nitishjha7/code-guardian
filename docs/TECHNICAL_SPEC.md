@@ -9,7 +9,7 @@ Manual peer code reviews are often slow and frequently miss subtle vulnerabiliti
 - **Specialized Agent Personas**: Independent auditing nodes for AppSec (OWASP, secret leaks) and Performance (Big-O, memory, caching).
 - **Autonomous Remediation**: A Patch Generator Node synthesizes the findings of both auditors to produce actionable, production-ready code diffs.
 - **Policy & Secrets Guardrails**: Guardrails AI guarantees that emitted code patches and comments do not expose environment variables, proprietary keys, or harmful configurations.
-- **MCP Integration**: Integrates GitHub MCP Server and Filesystem MCP Server to read pull requests and inspect repository trees natively.
+- **GitHub Integration**: Reads pull requests and posts review comments via PyGithub. *(This was originally specified as an MCP Server integration; it is not one — see §5 "Deviations". The model-driven tool calling this project does have lives in the supervisor, §3a.)*
 
 ## 2. Architecture & Multi-Agent Tech Stack
 
@@ -133,24 +133,56 @@ class ReviewerState(TypedDict):
 | Patch Generator | Synthesizes Security and Performance feedback without altering the original business logic. | Full refactored code block and unified git diff patch. |
 | Supervisor / Router | Bound to the specialist agents as tools; decides at runtime which audits a given diff actually needs, loops until no further tool calls, then aggregates deliverables into GitHub PR Markdown and passes through Guardrails AI. | Routing decisions + production-ready markdown comment and sanitized code response. |
 
-## 5. Implementation Roadmap: 2-Phase Strategy
+## 5. Implementation Status
 
-### Phase 1: Local Code Review Studio (1-2 Days)
-- Set up LangGraph graph with Security, Performance, and Patch nodes.
-- Create FastAPI `/api/review` endpoint.
-- Build React UI with code textarea, syntax highlighting, and collapsible audit cards.
+Phases 1 and 2 are **implemented and verified against a live model**. Phases 3–5
+remain roadmap (§7) by deliberate choice — see [BUILD_AND_DEPLOY.md](BUILD_AND_DEPLOY.md).
 
-### Phase 2: GitHub PR Bot & MCP Integration (Bonus / Advanced)
-- Connect GitHub MCP Server or GitHub Webhook listener.
-- Automatically trigger analysis when a Pull Request is opened or updated.
-- Post formatted reviews and patch suggestions directly as PR review comments.
+### Phase 1: Local Code Review Studio — ✅ done
+- ✅ LangGraph graph with Security, Performance and Patch nodes (`app/graph.py`),
+  supervisor wired as a tool-calling router with a `ToolNode` loop.
+- ✅ FastAPI `/api/review`, plus `/api/health` and `/api/graph` (Mermaid topology).
+- ✅ React + Monaco UI: findings / patch / markdown / agent-log tabs, per-auditor
+  "not run" and "failed" states, force-full-audit override.
+- ✅ Guardrails on every outbound diff, patch and comment.
+
+### Phase 2: GitHub PR Bot — ✅ done
+- ✅ `POST /webhook/github` with HMAC-SHA256 verification (`hmac.compare_digest`),
+  **fails closed** when no secret is configured.
+- ✅ Returns 202 and reviews in the background — GitHub abandons a delivery
+  after 10s, and a real review takes longer.
+- ✅ Reviews the lines a PR *adds*, aggregates per-file results into one comment.
+- ⚠️ Implemented with **PyGithub, not the GitHub MCP server** — rationale in
+  `app/mcp_clients/github_client.py` and [BUILD_AND_DEPLOY.md](BUILD_AND_DEPLOY.md).
+  The model-driven tool calling in this project lives in the supervisor (§3a).
+- ❌ Not exercised against a real repository; that needs a `GITHUB_TOKEN` and a
+  live PR.
+
+### Deviations from this spec, and why
+
+| Spec said | Built instead | Why |
+|---|---|---|
+| Guardrails AI | Local pattern scanner, Guardrails AI optional | some hub validators pull a full torch install |
+| Patch agent emits a git diff | Model emits the rewritten file; diff via `difflib` | LLM-authored unified diffs routinely fail to apply |
+| GitHub MCP Server / PyGithub | PyGithub | MCP's value is *model-driven* tool choice; these calls are fixed and webhook-driven |
+| `llama-3.3-70b-versatile` | `openai/gpt-oss-120b` | the former no longer exists on Groq |
+
+### Measured routing quality
+
+§3a's third mitigation — a labelled eval set — is implemented in `backend/evals/`
+(20 cases). On `openai/gpt-oss-120b`: **security recall 100%** (zero false
+negatives) both with and without the backstop; performance recall 50%
+router-only, 67% as-shipped. The set was tuned against, so it is not held out.
 
 ## 6. Docker Deployment Configuration
 
 The system is packaged with Docker Compose, providing seamless orchestration for both local code auditing and GitHub webhook ingestion.
 
 - `docker-compose.yml` sets up the asynchronous FastAPI backend and React frontend served via Nginx reverse proxy.
-- Environment variables (`GROQ_API_KEY`, `GITHUB_TOKEN`) are injected dynamically at runtime.
+- Nginx also proxies `/api/` to the backend container, so the browser needs no CORS preflight and the frontend ships with `VITE_API_URL=/api` in every environment.
+- Environment variables are read from `backend/.env` at runtime: `GROQ_API_KEY` and `GUARDIAN_MODEL` (required), `GITHUB_TOKEN` and `GITHUB_WEBHOOK_SECRET` (Phase 2 only).
+- The backend runs as a non-root user and is published on host port **8010** (container 8000), since 8000 is commonly occupied.
+- Two auxiliary images exist for CI-style runs: `backend/Dockerfile.test` (unit tests, no key needed) and `backend/Dockerfile.eval` (routing eval, needs a key).
 
 ## 7. Future Phases
 
