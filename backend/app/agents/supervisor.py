@@ -158,6 +158,28 @@ def _forced_fan_out() -> AIMessage:
     )
 
 
+def route_with_llm(source_code: str, language: str) -> AIMessage:
+    """The router's decision on its own, with no backstop applied.
+
+    Split out from :func:`supervisor_node` so the routing eval can measure the
+    *model's* judgement in isolation. Measuring only the shipped path would
+    flatter the router, because the high-stakes backstop catches many of the
+    cases the model would otherwise miss.
+    """
+    llm = get_llm(temperature=0.0).bind_tools(TOOLS)
+    return llm.invoke(
+        [
+            SystemMessage(content=SYSTEM_PROMPT),
+            HumanMessage(
+                content=(
+                    f"Language: {language}\n\nSubmission:\n```{language}\n"
+                    f"{source_code[:4000]}\n```"
+                )
+            ),
+        ]
+    )
+
+
 def supervisor_node(state: dict) -> dict:
     """Route the submission, or pass through once the audits are in."""
     messages = state.get("messages") or []
@@ -178,18 +200,7 @@ def supervisor_node(state: dict) -> dict:
                 "logs": [f"Supervisor: routing bypassed — {reason}."],
             }
 
-        llm = get_llm(temperature=0.0).bind_tools(TOOLS)
-        response = llm.invoke(
-            [
-                SystemMessage(content=SYSTEM_PROMPT),
-                HumanMessage(
-                    content=(
-                        f"Language: {language}\n\nSubmission:\n```{language}\n"
-                        f"{source_code[:4000]}\n```"
-                    )
-                ),
-            ]
-        )
+        response = route_with_llm(source_code, language)
         chosen = [tc["name"] for tc in getattr(response, "tool_calls", [])] or ["none"]
         return {
             "messages": [response],
