@@ -128,7 +128,11 @@ def parse_pull_request_event(payload: dict[str, Any]) -> PullRequestRef | None:
 
 def language_for_path(path: str) -> str | None:
     """Return the agent-facing language for a path, or None to skip it."""
-    lowered = path.lower()
+    # GitHub reports repo-relative paths, so a top-level vendored directory
+    # arrives as "node_modules/x.js" with no leading slash. Normalising with a
+    # leading "/" lets one marker match both root and nested occurrences without
+    # a substring rule loose enough to also match "my_node_modules_helper.js".
+    lowered = "/" + path.lower().lstrip("/")
     if any(marker in lowered for marker in _SKIP_MARKERS):
         return None
     for extension, language in LANGUAGE_BY_EXTENSION.items():

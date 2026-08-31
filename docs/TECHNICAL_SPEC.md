@@ -18,7 +18,7 @@ Manual peer code reviews are often slow and frequently miss subtle vulnerabiliti
 | Agent Orchestrator | LangGraph (StateGraph) | Multi-agent supervisor pattern — an LLM-driven **tool-calling router** (`bind_tools` + `ToolNode`) that selects specialists at runtime, with parallel execution, state reducers, and conditional edge routing. See §3a. |
 | LLM Engine | LangChain + Groq (`openai/gpt-oss-120b` default, set via `GUARDIAN_MODEL`) | Inference engine powering the security, performance, and remediation agents. Groq retires model ids over time — check `/v1/models` before pinning one. |
 | Safety & Guardrails | Guardrails AI (Secrets & Toxic Guards) | Scans output diffs to prevent API key leaks and validates tone of automated PR comments. |
-| Tooling Layer (MCP) | GitHub MCP Server / PyGithub | Model Context Protocol client fetching PR metadata, changed files, and posting review comments. |
+| Tooling Layer | PyGithub (`app/mcp_clients/github_client.py`) | Fetches PR metadata and changed files, posts review comments. Implemented with PyGithub rather than the GitHub MCP server — see the note in [BUILD_AND_DEPLOY.md](BUILD_AND_DEPLOY.md); the model-driven tool calling in this project lives in the supervisor, not here. |
 | Backend API | FastAPI (Asynchronous) | Provides webhook listener for GitHub PR events and REST endpoints for UI interaction. |
 | Frontend Workspace | React + Tailwind CSS / Monaco Editor | Interactive code review dashboard displaying split diff views, security alerts, and agent logs. |
 | Container Orchestration | Docker & Docker Compose | Containerized microservice stack ensuring reproducible local and cloud deployment. |

@@ -17,9 +17,9 @@ Main purpose: **interview me project dikhana**. Isliye depth + explainability zy
 - **Guardrails AI integration** — output diffs/comments me secrets leak na ho, ye validate karo. Interview me "production-thinking" dikhata hai.
 - **Clean architecture** — state schema (`ReviewerState`), node separation, docs (already ready in [SETUP.md](SETUP.md) & [TECHNICAL_SPEC.md](TECHNICAL_SPEC.md)).
 
-### 2. Nice-to-have (agar time mile)
+### 2. Nice-to-have (ban gaya)
 
-- **GitHub PR Bot (Phase 2)** — webhook listener jo PR open/update pe trigger ho, MCP/GitHub API se diff fetch kare, review comment post kare. Ye ek strong differentiator hai — "real automation", sirf toy demo nahi.
+- **GitHub PR Bot (Phase 2)** — ✅ bana hua hai. Webhook listener PR open/update pe trigger hota hai, GitHub API se diff fetch karta hai, aur review comment post karta hai. Ye strong differentiator hai — "real automation", sirf toy demo nahi. Setup steps [README](../README.md#github-pr-bot-phase-2) me hain.
 
 ### 3. Skip for now (sirf README/roadmap me likho)
 
@@ -57,11 +57,11 @@ Jo id mile wahi `GUARDIAN_MODEL` me daalo. Abhi default `openai/gpt-oss-120b` ha
 4. ✅ `backend/app/guardrails_config/` — secrets + tone guard on final output
 5. ✅ FastAPI `/api/review` endpoint wiring the graph (`backend/app/main.py`)
 6. ✅ React frontend — Monaco input + findings / patch / markdown / agent-log tabs
-7. ❌ (Bonus) GitHub webhook + MCP client for PR automation — `app/mcp_clients/` is still empty
+7. ✅ (Bonus) GitHub PR bot — `/webhook/github` with HMAC auth, `app/mcp_clients/github_client.py`, `app/pr_bot.py`
 
 ### Implementation notes worth knowing before the interview
 
-Four places where the code deliberately departs from the naive reading of the
+Five places where the code deliberately departs from the naive reading of the
 spec. Each is a decision you should be able to defend, not an accident:
 
 - **A failed audit is never rendered as "no issues found".** This one is worth
@@ -89,6 +89,15 @@ spec. Each is a decision you should be able to defend, not an accident:
   it does not flag the `os.environ[...]` the patch agent is *supposed* to emit),
   and `guardrail_report.engine` always names which engine produced the result.
   Do not claim "Guardrails AI" in an interview without saying this.
+- **The "MCP client" layer uses PyGithub, not an MCP server.** The spec listed
+  both as options and the folder is still called `mcp_clients/`. Running the
+  official GitHub MCP server would mean shipping a second (Node) container purely
+  to wrap REST calls this backend already makes, and MCP's actual value — letting
+  a *model* discover and call tools at runtime — does not apply: the PR bot's
+  GitHub calls are fixed and webhook-driven, not model-chosen. **So if you say
+  "MCP" in an interview, say it about `supervisor.py`, not about this file** —
+  that is where model-driven tool calling actually happens. Claiming an MCP
+  integration you did not build is the one thing that will sink you here.
 - **The router has a static backstop.** `looks_high_stakes()` in
   `supervisor.py` force-runs both auditors when the input obviously touches an
   auth, DB or exec surface, so the recall risk from §3a does not depend on the
@@ -99,9 +108,13 @@ spec. Each is a decision you should be able to defend, not an accident:
 
 `backend/tests/` covers the LLM-free seams — JSON recovery from messy model
 output, diff generation, the conditional-edge routing predicate, the state
-collector (including a malformed tool result), and every guardrail pattern.
-24 tests, no API key needed. There is **no** automated end-to-end test against a live
-model; the agent prompts are unvalidated until you run a real review.
+collector (including failed and malformed audits), every guardrail pattern, and
+the whole Phase 2 surface: HMAC signature verification, webhook event filtering,
+file-type selection, and added-line extraction from a diff.
+
+**50 tests, no API key needed.** Not covered: the agent prompts themselves (only
+validated by running a real review) and the PyGithub calls (need a token and a
+live PR).
 
 ---
 
@@ -140,5 +153,7 @@ model; the agent prompts are unvalidated until you run a real review.
 1. GitHub repo settings → Webhooks → Add webhook.
 2. Payload URL: deployed backend ka `/webhook/github` endpoint.
 3. Content type: `application/json`
-4. Events: "Pull requests" select karo.
-5. Secret set karo aur backend me `GITHUB_WEBHOOK_SECRET` env var me daalo (signature verify karne ke liye).
+4. Events: "Let me select individual events" → **Pull requests** select karo (baaki sab uncheck).
+5. Secret set karo (`openssl rand -hex 32`) aur **wahi** value backend ke `GITHUB_WEBHOOK_SECRET` env var me daalo. Ye optional nahi hai — secret ke bina endpoint 503 deta hai aur kuch process nahi karta (fail closed).
+6. `GITHUB_TOKEN` bhi set karo (repo scope), warna bot PR padh aur comment kar nahi payega.
+7. Webhook add karne ke baad GitHub turant ek `ping` bhejta hai — Recent Deliveries me `202 {"status":"pong"}` dikhna chahiye. Yahi sabse tez confirmation hai ki secret dono taraf match kar raha hai.
