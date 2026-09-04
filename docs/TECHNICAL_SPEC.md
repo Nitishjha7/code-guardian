@@ -186,24 +186,57 @@ The system is packaged with Docker Compose, providing seamless orchestration for
 
 ## 7. Future Phases
 
-### Phase 3: Advanced Intelligence Layer
-- **Code Quality Agent** — naya agent jo readability, naming conventions, DRY principle check kare.
-- **Test Coverage Agent** — dekh le ki naya code test cases ke saath hai ya nahi, aur khud test cases generate kar de.
-- **Dependency/License Agent** — check kare ki naye packages mein koi vulnerable ya risky license wali library toh nahi aa rahi (jaise npm audit ka AI version).
-- **Documentation Agent** — automatically docstrings/comments generate kare jo missing hain.
+The original Phase 3–5 sketch (agent roster expansion, vector-DB memory,
+full CI/CD auto-blocking) is kept below for reference, but the near-term
+plan is the reality-checked list that follows it: additions that fit the
+*existing* graph topology (§3a — "one more `@tool`, no edge rewiring") and
+verified LLM behaviour, rather than a parallel research project.
 
-### Phase 4: Learning & Memory
-- **Feedback Loop** — agar developer ne AI ka suggestion reject kiya, system yaad rakhe (vector DB mein store karke) taaki agli baar wahi galti na kare.
-- **Team-specific rules** — har team ka apna coding style guide ho, us hisaab se review customize ho (RAG use karke).
-- **Historical PR analysis** — purane bugs ka data dekh ke pattern samjhe ki is codebase mein kaunsi galtiyan baar baar hoti hain.
+### Near-term (fits current architecture, ordered by effort/impact)
 
-### Phase 5: CI/CD Integration
-- **Auto-block merge** — agar Critical security issue mile toh PR ko merge hone se rok de (GitHub branch protection ke saath).
-- **Slack/Discord notifications** — jab review complete ho ya critical issue mile, team ko turant alert bheje.
-- **Auto-create Jira/Linear ticket** — agar bada issue mile toh khud hi ticket bana de.
+1. **Static analysis fused into `security_audit`** — run Bandit (Python) /
+   Semgrep (multi-language) as a subprocess inside the existing tool, merge
+   their findings with the LLM's into the same `Finding` schema. This is the
+   single highest-leverage addition: it turns "an LLM that might miss things"
+   into "an LLM plus a deterministic scanner that can't miss its own rules,"
+   with no graph or schema change.
+2. **Risk score** — a weighted score (`Finding` severities already sorted in
+   `collect_node`, plus diff size) computed once, no new dependency. Turns the
+   report from "here are some findings" into a single number a reviewer can
+   triage on.
+3. **Test Generation Agent** — a fourth `@tool` (`test_generation_audit`) that
+   emits a regression test per finding (e.g. a `pytest` case asserting the SQL
+   injection is blocked). Deliberately generation-only — no execution sandbox
+   — because running LLM-authored code safely is a separate infrastructure
+   problem, not a review-agent feature.
+4. **GitHub Check Run status** — `pr_bot.py` already has a PyGithub client
+   authenticated against the PR; publishing a Check Run (`success`/`failure`
+   keyed off the risk score) is one more API call, and turns "posts a comment"
+   into "can gate a merge" without touching the review graph at all.
 
-### Extra Cool Features
-- **Multi-language support** — abhi Python/JS wagera hai, isme Rust, Go, Java bhi add kar sakte ho.
-- **Voice/Chat interface** — developer chat mein bot se poochh sake "ye function kyun flag hua?"
-- **Diff visualization** — Monaco editor mein side-by-side before/after with inline explanations.
-- **Cost/token tracking dashboard** — kitna LLM cost lag raha hai per review, wo track kare.
+### Deliberately deferred, and why
+
+These come up often (RAG over the whole repo, a dependency/impact graph,
+sandboxed patch validation, vector-DB team memory) and are *not* rejected on
+merit — they're rejected because each is its own multi-week project (repo
+ingestion, embeddings, a sandboxed execution runtime) rather than a node this
+graph can absorb. Building them half-way would cost the "depth over breadth"
+property this project is built on (see [BUILD_AND_DEPLOY.md](BUILD_AND_DEPLOY.md)).
+They stay on the list as what Phase 3+ would need to become a
+codebase-aware, self-healing agent, not as next sprint's work:
+
+- **Phase 3: Advanced Intelligence Layer** — Code Quality, Dependency/License,
+  and Documentation agents (Test Coverage is promoted above, since it fits
+  the existing tool-calling pattern without new infra).
+- **Phase 4: Learning & Memory** — a feedback loop and team-specific rules
+  stored in a vector DB, historical PR pattern analysis. Requires persistent
+  storage and embeddings the current stateless review graph doesn't have.
+- **Phase 5: CI/CD Integration (full form)** — Slack/Discord notifications,
+  auto-created Jira/Linear tickets. The Check Run gate above is the minimal,
+  high-value slice of this phase; the rest is integration surface, not
+  architecture.
+- **Self-healing patch loop** (generate → apply → run tests → regenerate) and
+  **codebase-wide dependency/impact graph** (AST/Tree-sitter parsing, "who
+  calls this function") — both need multi-file repo context and, for the
+  self-healing loop, a sandboxed execution environment. Out of scope until
+  there's a concrete plan for both.
