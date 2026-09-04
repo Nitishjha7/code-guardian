@@ -237,13 +237,21 @@ curl -X POST http://localhost:8010/webhook/github \
 |---|---|---|
 | 1 | **Local Code Review Studio** — LangGraph nodes, tool-calling supervisor, `/api/review`, React UI | ✅ done |
 | 2 | **GitHub PR Bot** — webhook-triggered reviews posted as PR comments | ✅ done |
-| 3 | Advanced Intelligence Layer — Code Quality, Test Coverage, Dependency/License, Documentation agents | roadmap |
-| 4 | Learning & Memory — feedback loop, team-specific rules, historical PR analysis | roadmap |
-| 5 | CI/CD Integration — auto-block merge, chat notifications, auto-ticketing | roadmap |
+| 2a | Real GitHub repo/PR verification (token + webhook against a live PR) | next up |
+| 2b | Static analysis (Bandit/Semgrep) fused into `security_audit` | planned |
+| 2c | Risk score on every review (severity + diff size, no new dependency) | planned |
+| 2d | Test Generation Agent — one more `@tool` emitting a regression test per finding | planned |
+| 2e | GitHub Check Run status (gate merges on risk score) | planned |
+| 3–5 | Advanced Intelligence Layer, Learning & Memory, full CI/CD Integration | roadmap, deliberately deferred |
 
-Phases 3–5 are deliberately not built. Adding a Phase 3 agent is one more
-`@tool` with a clear docstring — the graph topology does not change, which is
-the whole point of the supervisor pattern (§3a). Depth over breadth was the
-explicit call; see [docs/BUILD_AND_DEPLOY.md](docs/BUILD_AND_DEPLOY.md).
+Adding an agent is one more `@tool` with a clear docstring — the graph
+topology does not change, which is the whole point of the supervisor pattern
+(§3a). That's why 2b–2e are scoped the way they are: each fits inside the
+existing graph with no new infrastructure. Phases 3–5 in their original form
+(repo-wide RAG, a dependency/impact graph, sandboxed patch validation,
+vector-DB team memory) stay deliberately deferred — each is its own
+multi-week project, not a node this graph can absorb. Depth over breadth was
+the explicit call; see [docs/BUILD_AND_DEPLOY.md](docs/BUILD_AND_DEPLOY.md).
 
-Full details in [docs/TECHNICAL_SPEC.md](docs/TECHNICAL_SPEC.md).
+Full details, including what's deferred and why, in
+[docs/TECHNICAL_SPEC.md §7](docs/TECHNICAL_SPEC.md#7-future-phases).
