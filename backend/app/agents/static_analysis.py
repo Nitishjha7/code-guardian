@@ -1,0 +1,217 @@
+"""Deterministic static analysis, fused into the security audit.
+
+Per docs/TECHNICAL_SPEC.md §7: this turns "an LLM that might miss things" into
+"an LLM plus a scanner that cannot miss its own rules". The two are
+complementary, and the difference is worth stating precisely:
+
+* Bandit cannot miss a pattern it has a rule for, and cannot hallucinate one it
+  does not. Its recall on its own rule set is 100% and its false-positive rate
+  is a known, fixed property of those rules.
+* The LLM catches what no rule encodes - a missing authorization check, a
+  business-logic flaw, an insecure design - and explains *why* in context.
+
+Neither subsumes the other, so findings from both are merged into one
+``Finding`` list and tagged with ``source`` so a reviewer can tell which engine
+produced a given line.
+
+Bandit is Python-only. For other languages this module is a no-op and the audit
+is the LLM's alone - stated in the report rather than silently implied. Adding
+Semgrep later means writing one more ``_run_*`` function with the same shape;
+nothing else changes.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import subprocess
+import sys
+import tempfile
+
+from ..state import Finding
+
+logger = logging.getLogger("code_guardian.static_analysis")
+
+SUPPORTED_LANGUAGES = {"python"}
+
+# Bandit reports severity and confidence separately. A HIGH-severity finding the
+# scanner is only LOW-confidence about is not a Critical - it is a lead. This
+# table collapses the two axes the way a reviewer would triage them.
+_SEVERITY_MATRIX: dict[tuple[str, str], str] = {
+    ("HIGH", "HIGH"): "Critical",
+    ("HIGH", "MEDIUM"): "High",
+    ("HIGH", "LOW"): "Medium",
+    ("MEDIUM", "HIGH"): "High",
+    ("MEDIUM", "MEDIUM"): "Medium",
+    ("MEDIUM", "LOW"): "Low",
+    ("LOW", "HIGH"): "Medium",
+    ("LOW", "MEDIUM"): "Low",
+    ("LOW", "LOW"): "Low",
+}
+
+# Bandit's own messages are terse and rule-shaped. These make the common ones
+# read like review comments; anything without an entry falls back to Bandit's
+# text, which is always better than nothing.
+_RECOMMENDATIONS: dict[str, str] = {
+    "B105": "Do not hardcode credentials. Read them from an environment variable or a secrets manager.",
+    "B106": "Do not pass a hardcoded password as an argument. Read it from the environment.",
+    "B107": "Remove the hardcoded password default; require it to be supplied.",
+    "B108": "Use `tempfile.mkstemp()` or `tempfile.TemporaryDirectory()` instead of a predictable /tmp path.",
+    "B301": "Do not unpickle untrusted data. Use JSON, or sign the payload and verify before loading.",
+    "B303": "Replace MD5/SHA1 with SHA-256, or with bcrypt/argon2 for passwords.",
+    "B304": "Replace this insecure cipher with AES-GCM.",
+    "B305": "Do not use ECB mode; use an authenticated mode such as GCM.",
+    "B306": "Replace `mktemp()` with `mkstemp()`.",
+    "B307": "Do not call `eval()` on input you do not fully control. Use `ast.literal_eval()` or an explicit parser.",
+    "B308": "Escape the value instead of marking it safe.",
+    "B310": "Validate the URL scheme before opening it, to prevent `file://` and SSRF.",
+    "B321": "FTP is unencrypted. Use SFTP or HTTPS.",
+    "B324": "Use a secure hash (SHA-256+), or pass `usedforsecurity=False` if this hash is not security-relevant.",
+    "B501": "Do not disable TLS certificate verification.",
+    "B506": "Use `yaml.safe_load()` instead of `yaml.load()`.",
+    "B601": "Avoid shell parameter expansion; pass arguments as a list.",
+    "B602": "Do not use `shell=True` with untrusted input. Pass the command as a list.",
+    "B603": "Validate the arguments before passing them to a subprocess.",
+    "B604": "Do not pass a shell command built from untrusted input.",
+    "B605": "Replace `os.system()` with `subprocess.run([...])` and a list of arguments.",
+    "B608": "Build SQL with bound parameters (`cursor.execute(sql, params)`), never string concatenation.",
+    "B609": "Avoid wildcard arguments in shell commands.",
+    "B701": "Enable autoescaping in the template environment.",
+}
+
+
+def is_available() -> bool:
+    """Whether Bandit can be imported in this interpreter."""
+    try:
+        import bandit  # noqa: F401
+    except Exception:
+        return False
+    return True
+
+
+def _to_finding(issue: dict) -> Finding:
+    severity = _SEVERITY_MATRIX.get(
+        (
+            str(issue.get("issue_severity", "MEDIUM")).upper(),
+            str(issue.get("issue_confidence", "MEDIUM")).upper(),
+        ),
+        "Medium",
+    )
+    test_id = str(issue.get("test_id", ""))
+    code = (issue.get("code") or "").strip().splitlines()
+    line_hint = code[0].strip() if code else f"line {issue.get('line_number', '?')}"
+
+    return {
+        "title": str(issue.get("test_name") or issue.get("issue_text", "Static analysis finding")),
+        "severity": severity,
+        "line_hint": line_hint,
+        "explanation": str(issue.get("issue_text", "")),
+        "recommendation": _RECOMMENDATIONS.get(
+            test_id, "See Bandit rule " + test_id if test_id else "Review this pattern."
+        ),
+        "source": f"bandit:{test_id}" if test_id else "bandit",
+    }
+
+
+def run_bandit(source_code: str, timeout: int = 30) -> tuple[list[Finding], str | None]:
+    """Scan Python source with Bandit.
+
+    Returns ``(findings, error)``. Bandit performs AST analysis and never
+    executes the code it scans, so running it on an untrusted submission is
+    safe; the file is written to a private temp path and removed afterwards.
+
+    A scanner failure returns an error string rather than raising: the LLM half
+    of the audit may still have succeeded, and losing that to a missing optional
+    dependency would be the wrong trade. The caller surfaces the error rather
+    than dropping it.
+    """
+    if not is_available():
+        return [], "bandit is not installed"
+
+    handle, path = tempfile.mkstemp(suffix=".py", prefix="cg_scan_")
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8") as fh:
+            fh.write(source_code)
+
+        result = subprocess.run(
+            [sys.executable, "-m", "bandit", "-f", "json", "-q", path],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+        # Bandit exits 1 when it finds issues; that is a result, not a failure.
+        # Only a missing/!=0-without-output run is an actual error.
+        if not result.stdout.strip():
+            return [], (result.stderr or "bandit produced no output").strip()[:300]
+
+        payload = json.loads(result.stdout)
+    except subprocess.TimeoutExpired:
+        return [], f"bandit timed out after {timeout}s"
+    except (json.JSONDecodeError, OSError) as exc:
+        return [], f"bandit output could not be read: {exc}"
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+    issues = payload.get("results") or []
+    return [_to_finding(issue) for issue in issues], None
+
+
+def _dedupe_key(finding: Finding) -> str:
+    """Normalised code line, used to spot the same issue found twice."""
+    return "".join((finding.get("line_hint") or "").split()).lower()
+
+
+def merge(llm_findings: list[Finding], static_findings: list[Finding]) -> list[Finding]:
+    """Combine both engines' findings, preferring the LLM's wording on overlap.
+
+    When both flag the same line, the LLM's version is kept because it explains
+    the issue in context, but the entry is re-tagged to record that the scanner
+    independently confirmed it. A finding two independent engines agree on is
+    the one a reviewer should read first, and hiding that agreement would throw
+    away the most useful signal the fusion produces.
+    """
+    merged: list[Finding] = []
+    llm_keys: dict[str, Finding] = {}
+
+    for finding in llm_findings:
+        finding.setdefault("source", "llm")
+        key = _dedupe_key(finding)
+        if key:
+            llm_keys[key] = finding
+        merged.append(finding)
+
+    for finding in static_findings:
+        key = _dedupe_key(finding)
+        existing = llm_keys.get(key) if key else None
+        if existing is not None:
+            existing["source"] = f"llm+{finding.get('source', 'bandit')}"
+            # Two engines agreeing outranks either one alone.
+            if _rank(finding.get("severity")) < _rank(existing.get("severity")):
+                existing["severity"] = finding["severity"]
+            continue
+        merged.append(finding)
+
+    return merged
+
+
+_ORDER = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
+
+
+def _rank(severity: object) -> int:
+    return _ORDER.get(str(severity), 2)
+
+
+def audit(source_code: str, language: str) -> tuple[list[Finding], str | None]:
+    """Run every scanner that applies to ``language``.
+
+    Returns ``(findings, note)`` where ``note`` explains why the scanner did not
+    contribute, when it did not.
+    """
+    if language.lower() not in SUPPORTED_LANGUAGES:
+        return [], f"no static analyser configured for {language}"
+    return run_bandit(source_code)

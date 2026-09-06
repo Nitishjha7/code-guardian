@@ -201,7 +201,13 @@ def _render_report(state: ReviewerState, diff: str) -> str:
         for f in findings:
             severity = f.get("severity", "Medium")
             name = f.get("title", "Untitled finding")
-            out += [f"<details><summary><b>[{severity}] {name}</b></summary>", ""]
+            # A finding both engines found independently is the one to read
+            # first, so the corroboration goes in the collapsed summary line.
+            source = str(f.get("source", "llm"))
+            tag = " *(confirmed by static analysis)*" if source.startswith("llm+") else (
+                f" *({source})*" if source != "llm" else ""
+            )
+            out += [f"<details><summary><b>[{severity}] {name}</b>{tag}</summary>", ""]
             if f.get("line_hint"):
                 out += ["`" + str(f["line_hint"]) + "`", ""]
             if f.get("explanation"):

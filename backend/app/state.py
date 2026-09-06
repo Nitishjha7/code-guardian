@@ -33,6 +33,9 @@ class Finding(TypedDict, total=False):
     line_hint: str
     explanation: str
     recommendation: str
+    # Which engine produced this: "llm", "bandit:B608", or "llm+bandit:B608"
+    # when both found it independently.
+    source: str
     # Performance agent only:
     complexity_before: str
     complexity_after: str

@@ -28,6 +28,22 @@ export default function FindingCard({ finding }) {
         <span className="flex-1 text-sm font-medium text-slate-100">
           {finding.title}
         </span>
+        {finding.source && finding.source !== 'llm' && (
+          <span
+            className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-medium ${
+              finding.source.startsWith('llm+')
+                ? 'border-emerald-600/50 bg-emerald-500/10 text-emerald-300'
+                : 'border-slate-600 bg-slate-800 text-slate-400'
+            }`}
+            title={
+              finding.source.startsWith('llm+')
+                ? `Found by the LLM and independently confirmed by static analysis (${finding.source.slice(4)})`
+                : `Found by static analysis (${finding.source})`
+            }
+          >
+            {finding.source.startsWith('llm+') ? 'confirmed' : 'static'}
+          </span>
+        )}
         <span className="text-slate-500">{open ? '−' : '+'}</span>
       </button>
 

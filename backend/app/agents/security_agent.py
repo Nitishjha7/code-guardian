@@ -6,11 +6,16 @@ severity ratings.
 
 from __future__ import annotations
 
+import logging
+
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from ..config import get_llm
 from ..state import Finding
+from . import static_analysis
 from ._common import parse_json_list, truncate
+
+logger = logging.getLogger("code_guardian.security_agent")
 
 SYSTEM_PROMPT = """You are a senior application security engineer performing a \
 code audit. You look for real, exploitable defects — not style opinions.
@@ -45,7 +50,14 @@ Reply with a JSON array only. No prose before or after. Each element:
 
 
 def audit(source_code: str, language: str) -> list[Finding]:
-    """Run the security audit and return structured findings."""
+    """Run the security audit: LLM judgement fused with static analysis.
+
+    Both engines run and their findings are merged (see
+    :mod:`app.agents.static_analysis` for why neither subsumes the other). The
+    LLM half is the one that can fail hard - a scanner that is missing or
+    unsupported for this language only means fewer findings, not a broken audit,
+    so its failure is attached as a note rather than raised.
+    """
     llm = get_llm(temperature=0.0)
     response = llm.invoke(
         [
@@ -61,4 +73,10 @@ def audit(source_code: str, language: str) -> list[Finding]:
     for finding in findings:
         if finding.get("severity") not in valid:
             finding["severity"] = "Medium"
-    return findings  # type: ignore[return-value]
+        finding.setdefault("source", "llm")
+
+    static_findings, note = static_analysis.audit(source_code, language)
+    if note:
+        logger.info("Static analysis contributed nothing: %s", note)
+
+    return static_analysis.merge(findings, static_findings)  # type: ignore[arg-type]

@@ -73,11 +73,12 @@ class Finding(BaseModel):
     line_hint: str = ""
     explanation: str = ""
     recommendation: str = ""
+    source: str = "llm"
     complexity_before: str = "n/a"
     complexity_after: str = "n/a"
 
     @field_validator(
-        "title", "line_hint", "explanation", "recommendation",
+        "title", "line_hint", "explanation", "recommendation", "source",
         "complexity_before", "complexity_after",
         mode="before",
     )

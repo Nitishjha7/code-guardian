@@ -10,6 +10,9 @@ pydantic==2.10.5
 pydantic-settings==2.7.1
 python-dotenv==1.0.1
 
+# --- Static analysis (fused into the security audit, see app/agents/static_analysis.py) ---
+bandit==1.8.0
+
 # --- Phase 2 (GitHub PR bot) ---
 PyGithub==2.5.0
 httpx==0.28.1
