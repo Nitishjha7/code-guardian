@@ -28,14 +28,17 @@ from .state import Finding
 
 Band = Literal["none", "low", "medium", "high", "critical"]
 
-# Chosen so that a single Critical finding (40) lands in "high" and two land in
-# "critical" - i.e. one confirmed remote-exploit finding is enough to stop a
-# merge, which is the behaviour the Check Run gate (item 2e) will want.
+# Calibrated against the bands below, not picked for roundness: one Critical
+# finding must land in "high" (50) and two in "critical" (100), because a single
+# remotely exploitable vulnerability has to be enough to stop a merge once the
+# Check Run gate (item 2e) reads this number. Two High findings also reach
+# "high"; one High alone is "medium", which is the right amount of alarm for an
+# issue that needs unusual preconditions to exploit.
 _WEIGHTS: dict[str, int] = {
-    "Critical": 40,
-    "High": 20,
-    "Medium": 7,
-    "Low": 2,
+    "Critical": 50,
+    "High": 25,
+    "Medium": 8,
+    "Low": 3,
 }
 
 # A finding two independent engines agree on is materially more likely to be

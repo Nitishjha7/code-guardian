@@ -82,6 +82,25 @@ def _render_pr_comment(ref: PullRequestRef, results: list[tuple[ChangedFile, dic
             lines.append(f"> - `{filename}`: {', '.join(audits)}")
         lines.append("")
 
+    # The PR-level score is the worst file's, not an average: a PR is exactly as
+    # risky as its most dangerous change, and averaging would let one clean file
+    # dilute a Critical finding in another.
+    scored = [r.get("risk") or {} for _, r in results]
+    complete = [r for r in scored if r.get("complete", True) and r.get("score") is not None]
+    worst = max(complete, key=lambda r: r.get("score", 0), default=None)
+
+    if worst is not None and len(complete) == len(scored):
+        lines += [
+            f"**Risk {worst.get('score', 0)}/100 — {str(worst.get('band', 'none')).upper()}** "
+            f"(highest-risk file). {worst.get('note', '')}",
+            "",
+        ]
+    elif scored:
+        lines += [
+            "**Risk score unavailable** — at least one audit did not run.",
+            "",
+        ]
+
     lines += [
         f"Reviewed **{len(results)} file(s)** · "
         f"**{total_security} security** / **{total_performance} performance** finding(s).",
