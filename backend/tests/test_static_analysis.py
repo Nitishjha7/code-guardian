@@ -98,6 +98,40 @@ def test_unknown_severity_falls_back_to_medium():
     assert finding["severity"] == "Medium"
 
 
+def test_the_offending_line_is_extracted_not_a_neighbouring_one():
+    """Bandit returns numbered context lines; the issue is not always first."""
+    issue = {
+        "issue_severity": "LOW",
+        "issue_confidence": "MEDIUM",
+        "test_id": "B105",
+        "line_number": 3,
+        "code": '2 \n3 DB_PASSWORD = "hunter2"\n4 \n',
+    }
+    assert static_analysis._to_finding(issue)["line_hint"] == 'DB_PASSWORD = "hunter2"'
+
+
+def test_line_hint_falls_back_when_the_number_is_not_in_the_block():
+    issue = {"test_id": "B101", "line_number": 99, "code": "7     assert x\n"}
+    assert static_analysis._to_finding(issue)["line_hint"] == "assert x"
+
+
+def test_titles_read_as_sentences_not_rule_slugs():
+    issue = {
+        "test_id": "B324",
+        "test_name": "hashlib",
+        "issue_text": "Use of weak MD5 hash for security. Consider usedforsecurity=False",
+    }
+    title = static_analysis._to_finding(issue)["title"]
+
+    assert title == "Use of weak MD5 hash for security"
+    assert title != "hashlib"
+
+
+def test_title_falls_back_to_the_rule_name_without_issue_text():
+    issue = {"test_id": "B000", "test_name": "hardcoded_sql_expressions"}
+    assert static_analysis._to_finding(issue)["title"] == "hardcoded sql expressions"
+
+
 def test_known_rules_get_an_actionable_recommendation():
     finding = static_analysis._to_finding(
         {"issue_severity": "MEDIUM", "issue_confidence": "HIGH", "test_id": "B608"}

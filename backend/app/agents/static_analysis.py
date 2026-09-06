@@ -90,6 +90,45 @@ def is_available() -> bool:
     return True
 
 
+def _offending_line(code_block: str, line_number: object) -> str:
+    """Pull the offending line out of Bandit's ``code`` field.
+
+    Bandit returns a few lines of context, each prefixed with its line number:
+
+        "2 \\n3 DB_PASSWORD = \\"hunter2\\"\\n4 \\n"
+
+    Taking the first line therefore yields a neighbouring line - often a blank
+    one - rather than the issue itself, which both misleads the reader and
+    breaks deduplication against the LLM's quote of the real line.
+    """
+    target = str(line_number)
+    fallback = ""
+    for raw in (code_block or "").splitlines():
+        number, _, rest = raw.partition(" ")
+        if not number.strip().isdigit():
+            continue
+        text = rest.strip()
+        if number.strip() == target:
+            return text
+        if text and not fallback:
+            fallback = text
+    return fallback
+
+
+def _title_for(issue: dict) -> str:
+    """A readable title.
+
+    Bandit's ``test_name`` is a rule slug ("hashlib", "hardcoded_sql_expressions")
+    that reads like debug output in a review. ``issue_text`` is a sentence
+    written for a human, so that is used, with the slug kept only as a fallback.
+    """
+    text = str(issue.get("issue_text", "")).strip()
+    if text:
+        first = text.split(". ")[0].rstrip(".")
+        return first if len(first) <= 110 else first[:107] + "..."
+    return str(issue.get("test_name") or "Static analysis finding").replace("_", " ")
+
+
 def _to_finding(issue: dict) -> Finding:
     severity = _SEVERITY_MATRIX.get(
         (
@@ -99,13 +138,12 @@ def _to_finding(issue: dict) -> Finding:
         "Medium",
     )
     test_id = str(issue.get("test_id", ""))
-    code = (issue.get("code") or "").strip().splitlines()
-    line_hint = code[0].strip() if code else f"line {issue.get('line_number', '?')}"
+    line_hint = _offending_line(issue.get("code") or "", issue.get("line_number"))
 
     return {
-        "title": str(issue.get("test_name") or issue.get("issue_text", "Static analysis finding")),
+        "title": _title_for(issue),
         "severity": severity,
-        "line_hint": line_hint,
+        "line_hint": line_hint or f"line {issue.get('line_number', '?')}",
         "explanation": str(issue.get("issue_text", "")),
         "recommendation": _RECOMMENDATIONS.get(
             test_id, "See Bandit rule " + test_id if test_id else "Review this pattern."
@@ -161,9 +199,29 @@ def run_bandit(source_code: str, timeout: int = 30) -> tuple[list[Finding], str 
     return [_to_finding(issue) for issue in issues], None
 
 
+# Below this length a normalised line carries too little signal to match on -
+# "x=1" or "return" would collide across unrelated findings.
+_MIN_MATCH_LENGTH = 12
+
+
 def _dedupe_key(finding: Finding) -> str:
     """Normalised code line, used to spot the same issue found twice."""
     return "".join((finding.get("line_hint") or "").split()).lower()
+
+
+def _same_line(a: str, b: str) -> bool:
+    """Whether two normalised hints refer to the same line of code.
+
+    Containment rather than equality: the LLM quotes the expression it objects
+    to (``hashlib.md5(raw).hexdigest() == stored``) while the scanner reports
+    the whole statement (``return hashlib.md5(raw).hexdigest() == stored``).
+    Requiring equality would leave every such pair reported twice.
+    """
+    if not a or not b:
+        return False
+    if len(a) < _MIN_MATCH_LENGTH or len(b) < _MIN_MATCH_LENGTH:
+        return a == b
+    return a in b or b in a
 
 
 def merge(llm_findings: list[Finding], static_findings: list[Finding]) -> list[Finding]:
@@ -176,18 +234,16 @@ def merge(llm_findings: list[Finding], static_findings: list[Finding]) -> list[F
     away the most useful signal the fusion produces.
     """
     merged: list[Finding] = []
-    llm_keys: dict[str, Finding] = {}
+    indexed: list[tuple[str, Finding]] = []
 
     for finding in llm_findings:
         finding.setdefault("source", "llm")
-        key = _dedupe_key(finding)
-        if key:
-            llm_keys[key] = finding
+        indexed.append((_dedupe_key(finding), finding))
         merged.append(finding)
 
     for finding in static_findings:
         key = _dedupe_key(finding)
-        existing = llm_keys.get(key) if key else None
+        existing = next((f for k, f in indexed if _same_line(key, k)), None)
         if existing is not None:
             existing["source"] = f"llm+{finding.get('source', 'bandit')}"
             # Two engines agreeing outranks either one alone.
