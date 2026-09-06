@@ -120,7 +120,7 @@ decision visible:
 
 | Sample | Observed behaviour |
 |---|---|
-| Vulnerable Python (SQLi + N+1) | Both auditors run (the high-stakes backstop forces them). Critical SQL injection, High hardcoded password, Medium MD5 hashing; N+1 queries `O(n)` → `O(1)`, missing index, unclosed connection. 80-line patch. **~6.4s** |
+| Vulnerable Python (SQLi + N+1) | Both auditors run (the high-stakes backstop forces them). 5 security findings — 3 of them marked **`confirmed`** because Bandit flagged the same line independently, and 2 SQLi sites only Bandit caught. N+1 queries `O(n)` → `O(1)`, missing index, unclosed connection. **~7.4s** |
 | Plain CSS | Router calls **no auditor at all** and the UI shows both sections as "not run". **~0.9s** — the cost difference *is* the demo |
 | Slow JavaScript | Router calls **performance only**; flags the quadratic join `O(u × e)` → `O(u + e)` |
 
