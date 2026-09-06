@@ -20,9 +20,11 @@ Code Guardian is a multi-agent code auditing platform. It coordinates specialize
 >
 > | Check | Result |
 > |---|---|
-> | 71 backend unit tests | pass |
+> | 87 backend unit tests | pass |
 > | Routing eval, 20 labelled cases | security recall **100%** (0 false negatives); performance recall 50% |
 > | Static analysis fusion (vulnerable Python) | 8 raw findings → **5** after dedup; **3 confirmed by both engines**; Bandit added 2 SQLi sites the LLM missed |
+> | Risk score across the three samples | vulnerable Python **100/100 critical**, slow JS **10/100 low**, plain CSS **0/100 none** |
+> | Risk score on a failed audit | band `unknown`, "score unavailable" — never a reassuring number |
 > | Frontend production build | pass |
 > | Compose stack (nginx → backend) | `/api/health` + `/api/review` both 200 |
 > | Vulnerable Python sample | 3 security + 4 performance findings, 80-line patch, 6.4s |
@@ -59,7 +61,8 @@ backend/app/agents/static_analysis.py   # Bandit fusion: scan, map, dedupe, merg
 backend/app/guardrails_config/ # Secrets + tone validators on all outbound text
 backend/app/pr_bot.py          # Phase 2: HMAC verification + PR review orchestration
 backend/app/mcp_clients/       # GitHub client (PyGithub): PR diffs, comments
-backend/tests/                 # 71 unit tests for the LLM-free seams
+backend/app/risk.py            # Weighted risk score (findings + size, corroboration-aware)
+backend/tests/                 # 87 unit tests for the LLM-free seams
 backend/evals/                 # 20 labelled snippets measuring routing recall
 frontend/src/                  # React + Monaco review dashboard
 docs/                          # Setup, technical spec, build & deploy
@@ -124,8 +127,22 @@ decision visible:
 | Plain CSS | Router calls **no auditor at all** and the UI shows both sections as "not run". **~0.9s** — the cost difference *is* the demo |
 | Slow JavaScript | Router calls **performance only**; flags the quadratic join `O(u × e)` → `O(u + e)` |
 
-Two things to show beyond the findings:
+Every review opens with a **risk score** (0–100 plus a band), computed once in
+`collect_node` and read identically by the report, the API, the UI and the PR
+comment. Weights are calibrated against the bands rather than picked for
+roundness: one Critical finding reaches *high*, two reach *critical*, because a
+single remotely exploitable vulnerability has to be enough to stop a merge once
+the Check Run gate (2e) reads this number. Findings dominate — diff size is
+capped at a +25% modifier, so a 2000-line clean diff still scores 0 — and
+findings both engines confirmed weigh 1.25×. Across a PR the bot reports the
+**worst file's** score, not an average: a PR is as risky as its most dangerous
+change.
 
+Three things to show beyond the findings:
+
+- **The risk score on a failed audit.** It reports band `unknown` and "score
+  unavailable", never 0/none. A number computed from findings that were never
+  collected would be the silent-pass bug wearing a friendlier face.
 - **The "Force full audit" checkbox** — the §3a override. It bypasses routing
   and runs every auditor, for high-stakes paths where a false negative is worse
   than wasted tokens.
@@ -243,7 +260,7 @@ curl -X POST http://localhost:8010/webhook/github \
 | 2 | **GitHub PR Bot** — webhook-triggered reviews posted as PR comments | ✅ done |
 | 2a | Real GitHub repo/PR verification (token + webhook against a live PR) | next up |
 | 2b | **Static analysis (Bandit) fused into `security_audit`** — findings from both engines merged into one list, tagged by source | ✅ done |
-| 2c | Risk score on every review (severity + diff size, no new dependency) | planned |
+| 2c | **Risk score on every review** — one number, calibrated so a single Critical blocks a merge | ✅ done |
 | 2d | Test Generation Agent — one more `@tool` emitting a regression test per finding | planned |
 | 2e | GitHub Check Run status (gate merges on risk score) | planned |
 | 3–5 | Advanced Intelligence Layer, Learning & Memory, full CI/CD Integration | roadmap, deliberately deferred |

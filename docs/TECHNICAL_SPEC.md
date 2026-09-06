@@ -213,10 +213,29 @@ verified LLM behaviour, rather than a parallel research project.
    reader and breaks dedup); and dedup matches by *containment* of the
    normalised line, because the LLM quotes an expression while the scanner
    reports the whole statement.
-2. **Risk score** — a weighted score (`Finding` severities already sorted in
-   `collect_node`, plus diff size) computed once, no new dependency. Turns the
-   report from "here are some findings" into a single number a reviewer can
-   triage on.
+2. ~~**Risk score**~~ — ✅ **done** (`app/risk.py`). Computed once in
+   `collect_node` and read by the report, the API, the UI and the PR comment, so
+   nothing derives its own number. No new dependency.
+
+   Weights are calibrated against the bands rather than picked for roundness:
+   one Critical finding must reach the *high* band and two must reach *critical*,
+   because a single remotely exploitable vulnerability has to be enough to stop
+   a merge once the Check Run gate (item 4) reads this. Three properties the
+   tests pin down:
+
+   - **An incomplete review can never look safe.** A failed audit yields no
+     findings, and a score computed from no findings would read "0/100, none"
+     about code nothing examined. The score is marked `complete: false` with
+     band `unknown` instead — the same rule that governs the report.
+   - **Findings dominate; size only modulates.** Diff size is capped at a +25%
+     modifier, so a 2000-line clean diff still scores 0.
+   - **Corroboration counts.** A finding both engines flagged (`llm+bandit:*`)
+     is weighted 1.25×, and performance findings are discounted to 0.4× against
+     security ones — a slow query is a cost, a SQL injection is a breach.
+
+   Observed: vulnerable Python **100/100 critical**, slow JS **10/100 low**,
+   plain CSS **0/100 none**. Across a PR the bot reports the *worst* file's
+   score, not an average — a PR is as risky as its most dangerous change.
 3. **Test Generation Agent** — a fourth `@tool` (`test_generation_audit`) that
    emits a regression test per finding (e.g. a `pytest` case asserting the SQL
    injection is blocked). Deliberately generation-only — no execution sandbox
