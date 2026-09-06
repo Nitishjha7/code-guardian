@@ -55,10 +55,10 @@ backend/app/state.py           # ReviewerState schema
 backend/app/config.py          # Settings + shared LLM factory
 backend/app/main.py            # FastAPI: /api/review, /api/health, /api/graph, /webhook/github
 backend/app/agents/            # Security, Performance, Patch Generator, Supervisor
+backend/app/agents/static_analysis.py   # Bandit fusion: scan, map, dedupe, merge
 backend/app/guardrails_config/ # Secrets + tone validators on all outbound text
 backend/app/pr_bot.py          # Phase 2: HMAC verification + PR review orchestration
 backend/app/mcp_clients/       # GitHub client (PyGithub): PR diffs, comments
-backend/app/agents/static_analysis.py  # Bandit fusion: scan, map, dedupe, merge
 backend/tests/                 # 71 unit tests for the LLM-free seams
 backend/evals/                 # 20 labelled snippets measuring routing recall
 frontend/src/                  # React + Monaco review dashboard
