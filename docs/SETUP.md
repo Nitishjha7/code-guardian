@@ -87,7 +87,7 @@ Vite dev server `/api` ko `localhost:8000` pe proxy karta hai (Docker ke bina wa
 ## Tests aur eval
 
 ```bash
-# 50 unit tests — koi API key nahi chahiye
+# 71 unit tests — koi API key nahi chahiye
 cd backend && pytest -q
 
 # Routing eval — API key chahiye (~20 LLM calls)

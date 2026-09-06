@@ -40,6 +40,7 @@ Code Guardian is a multi-agent code auditing platform. It coordinates specialize
 
 - **Agent Orchestrator**: LangGraph (StateGraph) — supervisor pattern built as an LLM **tool-calling router** (`bind_tools` + `ToolNode`): the model decides which specialists a given diff actually needs, instead of a fixed fan-out. Parallel tool execution, state reducers, conditional edge routing. See [§3a of the spec](docs/TECHNICAL_SPEC.md)
 - **LLM Engine**: LangChain + Groq (`openai/gpt-oss-120b` by default; any tool-calling model your key can see, set via `GUARDIAN_MODEL`)
+- **Static Analysis**: Bandit runs inside the security audit and its findings merge with the LLM's into one list, tagged by `source`. Neither engine subsumes the other — the scanner cannot miss a pattern it has a rule for or hallucinate one it doesn't; the LLM catches what no rule encodes (missing authorization, business-logic flaws) and explains it in context. A finding both engines flag independently is marked `llm+bandit:<rule>` and escalated in severity
 - **Safety & Guardrails**: secrets scanning + tone guard on every outbound diff, patch and comment. Guardrails AI is used when installed; the default is a local pattern scanner, and `guardrail_report.engine` always names which one ran — see [Build & Deploy](docs/BUILD_AND_DEPLOY.md) for why
 - **Tooling Layer**: PyGithub — fetches PR diffs, posts review comments (not the GitHub MCP server; [why](docs/BUILD_AND_DEPLOY.md))
 - **Backend**: FastAPI (async) — REST API + HMAC-authenticated GitHub webhook listener
@@ -57,7 +58,8 @@ backend/app/agents/            # Security, Performance, Patch Generator, Supervi
 backend/app/guardrails_config/ # Secrets + tone validators on all outbound text
 backend/app/pr_bot.py          # Phase 2: HMAC verification + PR review orchestration
 backend/app/mcp_clients/       # GitHub client (PyGithub): PR diffs, comments
-backend/tests/                 # 50 unit tests for the LLM-free seams
+backend/app/agents/static_analysis.py  # Bandit fusion: scan, map, dedupe, merge
+backend/tests/                 # 71 unit tests for the LLM-free seams
 backend/evals/                 # 20 labelled snippets measuring routing recall
 frontend/src/                  # React + Monaco review dashboard
 docs/                          # Setup, technical spec, build & deploy
@@ -101,7 +103,8 @@ npm run dev        # http://localhost:5173, proxies /api to :8000
 
 The tests cover the deterministic seams — response parsing, diff generation,
 routing, the state collector, the guardrails, and the whole webhook surface
-(HMAC verification, event filtering, file selection) — so they run without an
+(HMAC verification, event filtering, file selection), and the static-analysis
+fusion (severity mapping, line extraction, dedup) — so they run without an
 API key, a GitHub token, or a single LLM call.
 
 ```bash

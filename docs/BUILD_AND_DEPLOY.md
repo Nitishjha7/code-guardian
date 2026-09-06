@@ -112,7 +112,7 @@ collector (including failed and malformed audits), every guardrail pattern, and
 the whole Phase 2 surface: HMAC signature verification, webhook event filtering,
 file-type selection, and added-line extraction from a diff.
 
-**50 tests, no API key needed.** Not covered by the unit tests: the agent
+**71 tests, no API key needed.** Not covered by the unit tests: the agent
 prompts themselves and the PyGithub calls (need a token and a live PR).
 
 The routing decision *is* measured, separately, by `backend/evals/` - 20 labelled
