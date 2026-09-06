@@ -19,6 +19,7 @@ from langchain_core.messages import ToolMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
+from . import risk
 from .agents import patch_generator, supervisor
 from .guardrails_config import validate_output
 from .state import Finding, ReviewerState
@@ -103,9 +104,19 @@ def collect_node(state: ReviewerState) -> dict:
     security.sort(key=lambda f: _SEVERITY_ORDER.get(f.get("severity", "Medium"), 2))
     performance.sort(key=lambda f: _SEVERITY_ORDER.get(f.get("severity", "Medium"), 2))
 
+    # Scored here, where the findings are first complete, so every consumer
+    # downstream (report, API, PR comment, and the future Check Run gate) reads
+    # the same number rather than each deriving its own.
+    risk_score = risk.score(
+        security_issues=security,
+        performance_issues=performance,
+        source_code=state.get("source_code", ""),
+        failed_audits=sorted(set(failed)),
+    )
+
     log = (
         f"Collector: {len(security)} security finding(s), "
-        f"{len(performance)} performance finding(s)."
+        f"{len(performance)} performance finding(s). {risk.describe(risk_score)}"
     )
     if failed:
         log += f" {len(failed)} audit(s) FAILED: {', '.join(failed)}."
@@ -116,6 +127,7 @@ def collect_node(state: ReviewerState) -> dict:
         "routed_to": sorted(set(routed)),
         "failed_audits": sorted(set(failed)),
         "audit_errors": errors,
+        "risk": risk_score,
         "logs": [log],
     }
 
@@ -182,6 +194,18 @@ def _render_report(state: ReviewerState, diff: str) -> str:
     severe = sum(
         1 for f in security + performance if f.get("severity") in ("Critical", "High")
     )
+
+    risk_score = state.get("risk") or {}
+    if risk_score:
+        if risk_score.get("complete", True):
+            badge = f"**Risk {risk_score.get('score', 0)}/100 — {str(risk_score.get('band', 'none')).upper()}**"
+            lines += [f"{badge}. {risk_score.get('note', '')}", ""]
+        else:
+            lines += [
+                f"**Risk score unavailable.** {risk_score.get('note', '')}",
+                "",
+            ]
+
     lines += [
         f"**{len(security)} security** / **{len(performance)} performance** "
         f"finding(s) - {severe} at High or Critical severity.",

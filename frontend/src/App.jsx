@@ -179,6 +179,8 @@ export default function App() {
                 </div>
               )}
 
+              {result.risk && <RiskBanner risk={result.risk} />}
+
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="rounded border border-slate-700 bg-slate-900 px-2 py-1">
                   Routed to:{' '}
@@ -268,6 +270,40 @@ export default function App() {
           )}
         </section>
       </main>
+    </div>
+  )
+}
+
+const BAND_STYLES = {
+  critical: 'border-red-500/50 bg-red-500/10 text-red-300',
+  high: 'border-orange-500/50 bg-orange-500/10 text-orange-300',
+  medium: 'border-amber-500/50 bg-amber-500/10 text-amber-300',
+  low: 'border-sky-500/50 bg-sky-500/10 text-sky-300',
+  none: 'border-emerald-600/50 bg-emerald-500/10 text-emerald-300',
+  unknown: 'border-slate-600 bg-slate-800/60 text-slate-400',
+}
+
+function RiskBanner({ risk }) {
+  const style = BAND_STYLES[risk.band] || BAND_STYLES.unknown
+
+  return (
+    <div className={`rounded-lg border px-4 py-3 ${style}`}>
+      <div className="flex items-baseline gap-3">
+        <span className="text-2xl font-semibold tabular-nums">
+          {risk.complete ? risk.score : '—'}
+        </span>
+        <span className="text-xs uppercase tracking-wide opacity-80">
+          / 100 · {risk.band}
+        </span>
+      </div>
+      <p className="mt-1 text-xs opacity-90">{risk.note}</p>
+      {risk.drivers?.length > 0 && (
+        <ul className="mt-2 space-y-0.5 text-[11px] opacity-80">
+          {risk.drivers.map((d, i) => (
+            <li key={i}>· {d}</li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

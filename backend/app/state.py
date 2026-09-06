@@ -63,6 +63,10 @@ class ReviewerState(TypedDict, total=False):
     failed_audits: list[str]
     audit_errors: list[str]
 
+    # Weighted risk score computed once in collect_node - see app/risk.py.
+    # Marked incomplete rather than low when an audit failed.
+    risk: dict[str, Any]
+
     # Audits that were invoked but never produced a result (bad key, dead model,
     # rate limit). Kept separate from "found nothing" so a failed audit can never
     # be rendered as a clean pass.

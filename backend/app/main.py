@@ -87,9 +87,19 @@ class Finding(BaseModel):
         return "" if value is None else str(value)
 
 
+class RiskScore(BaseModel):
+    score: int = 0
+    band: str = "none"
+    complete: bool = True
+    size_modifier: float = 1.0
+    drivers: list[str] = []
+    note: str = ""
+
+
 class ReviewResponse(BaseModel):
     language: str
     routed_to: list[str]
+    risk: RiskScore = RiskScore()
     failed_audits: list[str]
     audit_errors: list[str]
     security_issues: list[Finding]
@@ -158,6 +168,7 @@ async def review(request: ReviewRequest) -> ReviewResponse:
     return ReviewResponse(
         language=state.get("language", request.language),
         routed_to=state.get("routed_to", []),
+        risk=RiskScore(**(state.get("risk") or {})),
         failed_audits=state.get("failed_audits", []),
         audit_errors=state.get("audit_errors", []),
         security_issues=[Finding(**f) for f in state.get("security_issues", [])],
