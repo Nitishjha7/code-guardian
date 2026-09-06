@@ -183,6 +183,32 @@ def test_agreement_takes_the_more_severe_rating():
     assert merged[0]["severity"] == "Critical"
 
 
+def test_a_quoted_expression_matches_the_full_statement():
+    """The LLM quotes the expression; the scanner reports the whole line."""
+    merged = merge(
+        [_f("Insecure hashing", "hashlib.md5(raw.encode()).hexdigest() == stored")],
+        [_f("Use of weak MD5 hash", "return hashlib.md5(raw.encode()).hexdigest() == stored",
+            source="bandit:B324")],
+    )
+
+    assert len(merged) == 1
+    assert merged[0]["source"] == "llm+bandit:B324"
+
+
+def test_short_hints_still_require_an_exact_match():
+    """`x = 1` must not swallow every other short line."""
+    merged = merge([_f("a", "x = 1")], [_f("b", "y = 2", source="bandit:B101")])
+    assert len(merged) == 2
+
+
+def test_unrelated_long_lines_are_not_merged():
+    merged = merge(
+        [_f("a", 'cursor.execute("SELECT id FROM users WHERE name = " + name)')],
+        [_f("b", 'subprocess.call(user_command, shell=True)', source="bandit:B602")],
+    )
+    assert len(merged) == 2
+
+
 def test_llm_findings_are_tagged_even_with_no_static_results():
     merged = merge([{"title": "Design flaw", "line_hint": "def f():"}], [])
     assert merged[0]["source"] == "llm"
