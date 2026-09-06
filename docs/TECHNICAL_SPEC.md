@@ -194,12 +194,25 @@ verified LLM behaviour, rather than a parallel research project.
 
 ### Near-term (fits current architecture, ordered by effort/impact)
 
-1. **Static analysis fused into `security_audit`** — run Bandit (Python) /
-   Semgrep (multi-language) as a subprocess inside the existing tool, merge
-   their findings with the LLM's into the same `Finding` schema. This is the
-   single highest-leverage addition: it turns "an LLM that might miss things"
-   into "an LLM plus a deterministic scanner that can't miss its own rules,"
-   with no graph or schema change.
+1. ~~**Static analysis fused into `security_audit`**~~ — ✅ **done**
+   (`app/agents/static_analysis.py`). Bandit runs as a subprocess inside the
+   existing tool and its findings merge into the same `Finding` schema; no graph
+   or schema change beyond one `source` field. Semgrep would slot in as one more
+   `_run_*` function of the same shape.
+
+   Measured on the vulnerable-Python demo: **8 raw findings deduplicate to 5**,
+   of which **3 are confirmed by both engines** (`llm+bandit:B608`, `B324`,
+   `B105`). Agreement escalates severity — the MD5 finding the LLM rated *High*
+   became *Critical* once Bandit independently flagged it HIGH/HIGH — and Bandit
+   contributed two SQL-injection sites the LLM had missed. That is the fusion
+   argument holding up in practice, not in principle.
+
+   Two implementation details worth knowing: Bandit's `code` field returns
+   *numbered context lines*, so the offending line must be selected by
+   `line_number` rather than taken first (doing the latter both misleads the
+   reader and breaks dedup); and dedup matches by *containment* of the
+   normalised line, because the LLM quotes an expression while the scanner
+   reports the whole statement.
 2. **Risk score** — a weighted score (`Finding` severities already sorted in
    `collect_node`, plus diff size) computed once, no new dependency. Turns the
    report from "here are some findings" into a single number a reviewer can

@@ -20,8 +20,9 @@ Code Guardian is a multi-agent code auditing platform. It coordinates specialize
 >
 > | Check | Result |
 > |---|---|
-> | 50 backend unit tests | pass |
+> | 71 backend unit tests | pass |
 > | Routing eval, 20 labelled cases | security recall **100%** (0 false negatives); performance recall 50% |
+> | Static analysis fusion (vulnerable Python) | 8 raw findings → **5** after dedup; **3 confirmed by both engines**; Bandit added 2 SQLi sites the LLM missed |
 > | Frontend production build | pass |
 > | Compose stack (nginx → backend) | `/api/health` + `/api/review` both 200 |
 > | Vulnerable Python sample | 3 security + 4 performance findings, 80-line patch, 6.4s |
@@ -238,7 +239,7 @@ curl -X POST http://localhost:8010/webhook/github \
 | 1 | **Local Code Review Studio** — LangGraph nodes, tool-calling supervisor, `/api/review`, React UI | ✅ done |
 | 2 | **GitHub PR Bot** — webhook-triggered reviews posted as PR comments | ✅ done |
 | 2a | Real GitHub repo/PR verification (token + webhook against a live PR) | next up |
-| 2b | Static analysis (Bandit/Semgrep) fused into `security_audit` | planned |
+| 2b | **Static analysis (Bandit) fused into `security_audit`** — findings from both engines merged into one list, tagged by source | ✅ done |
 | 2c | Risk score on every review (severity + diff size, no new dependency) | planned |
 | 2d | Test Generation Agent — one more `@tool` emitting a regression test per finding | planned |
 | 2e | GitHub Check Run status (gate merges on risk score) | planned |
