@@ -169,10 +169,16 @@ remain roadmap (§7) by deliberate choice — see [BUILD_AND_DEPLOY.md](BUILD_AN
 
 ### Measured routing quality
 
-§3a's third mitigation — a labelled eval set — is implemented in `backend/evals/`
-(20 cases). On `openai/gpt-oss-120b`: **security recall 100%** (zero false
-negatives) both with and without the backstop; performance recall 50%
-router-only, 67% as-shipped. The set was tuned against, so it is not held out.
+§3a's third mitigation — a labelled eval set — is implemented in `backend/evals/`,
+now as **two** sets of 20: a dev set the tool docstrings were tuned against, and a
+**held-out** set that was never tuned against and is deliberately harder (Go, Java,
+SQL, shell; plus no-audit cases carrying *token*/*auth*/*query* in harmless
+positions, since the backstop keys off those words).
+
+On `openai/gpt-oss-20b`: **as-shipped security recall 100% on the held-out set**,
+zero false negatives. Router-only is 89% held-out against 90% dev — a one-point
+gap, so the docstring tuning generalised rather than overfitting. Performance
+routing is the weak spot: 43% held-out, 50% dev.
 
 ## 6. Docker Deployment Configuration
 

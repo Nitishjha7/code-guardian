@@ -18,8 +18,8 @@ hai; [TECHNICAL_SPEC §7](TECHNICAL_SPEC.md) me deferred items ka detail hai.
 | 2e | GitHub Check Run status (gate merges on risk score) | ⬜ next |
 | 3–5 | Advanced Intelligence, Learning & Memory, full CI/CD | ⬜ deliberately deferred |
 
-**Extra jo plan me nahi tha par ban gaya:** routing eval (`backend/evals/`), 99 unit
-tests, aur poora docs set.
+**Extra jo plan me nahi tha par ban gaya:** routing eval with a **held-out set**
+(`backend/evals/`, 40 cases), 99 unit tests, aur poora docs set.
 
 ---
 
@@ -30,7 +30,8 @@ Jo bhi yahan likha hai wo actually chalaya gaya hai, claim nahi kiya gaya.
 | Check | Result |
 |---|---|
 | Unit tests | **99 pass**, koi API key nahi |
-| Routing eval (20 cases) | security recall **100%**, 0 false negatives; performance recall 50% router-only, 67% as-shipped |
+| Routing eval, **held-out** (20 cases, never tuned) | as-shipped security recall **100%**, 0 false negatives; router-only 89%; performance 43% |
+| Routing eval, dev (20 cases, tuned against) | as-shipped 100%; router-only 90%; performance 50% |
 | Static fusion (vulnerable Python) | 8 raw → **5** dedup ke baad; **3 confirmed by both engines**; Bandit ne 2 SQLi extra pakde |
 | Risk score | vuln Python **100/100 critical** · slow JS **10/100 low** · CSS **0/100 none** |
 | Failed audit | band `unknown`, "score unavailable", "Audit failed — this code was not checked" |
@@ -126,10 +127,9 @@ line + purani line ka interaction). Par repo ingestion apne aap me project hai.
 
 Ye khud jaan-na interview me sabse zaroori hai:
 
-1. **Eval set held-out nahi hai.** 20 cases pe tune kiya (recall 33% → 50%), to
-   numbers optimistic hain. Fix: naye cases likho, unpe tune mat karo.
-2. **Performance routing 50%.** Teen snippets pe model ne performance-only code pe
-   security auditor bulaya.
+1. **Performance routing kamzor hai** — dev set pe 50%, held-out pe 43%. Model
+   performance-only code pe security auditor bula leta hai. Security ke ulta,
+   yahan koi backstop nahi hai jo bachaye.
 3. **Bandit sirf Python.** Baaki languages pe security audit akela LLM hai. Semgrep
    ek aur `_run_*` function hai — same shape, aur kuch nahi badalta.
 4. **PR bot live verify nahi hua** (2a).
@@ -144,7 +144,7 @@ Ye khud jaan-na interview me sabse zaroori hai:
 |---|---|---|---|
 | 1 | **2a** — asli PR pe chalao | 30 min | "real automation" ka claim isi se sach hota hai |
 | 2 | **2e** — Check Run gate | 1-2 hrs | comment → merge gate, risk score already hai |
-| 3 | **Held-out eval set** (20 naye cases) | 2 hrs | sabse bada honesty gap band karta hai |
+| 3 | **Eval dobara 120b pe chalao** | 20 min | abhi ke numbers 20b se hain (120b ka quota khatam tha) |
 | 4 | **Semgrep** multi-language | 2-3 hrs | Bandit-only limitation hatati hai |
 | 5 | Findings quality eval (labelled vulns) | 1 day | abhi sirf routing naapa hai, findings nahi |
 | 6 | Cost/token tracking | 3 hrs | abhi cost ka number bolne layak nahi hai |

@@ -1,13 +1,12 @@
-import { Icon } from './Icons'
 import { CARD, band } from '../lib/ui'
 import { relativeTime } from '../lib/history'
 
-export function RiskDonut({ risk, size = 110 }) {
+export function RiskDonut({ risk, size = 88 }) {
   const style = band(risk?.band)
   const complete = risk?.complete !== false
   const value = complete ? Math.max(0, Math.min(100, risk?.score ?? 0)) : 0
 
-  const stroke = 9
+  const stroke = 7
   const r = (size - stroke) / 2
   const circumference = 2 * Math.PI * r
 
@@ -33,18 +32,13 @@ export function RiskDonut({ risk, size = 110 }) {
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={circumference * (1 - value / 100)}
-            style={{ transition: 'stroke-dashoffset .6s ease' }}
+            style={{ transition: 'stroke-dashoffset .5s ease' }}
           />
         )}
       </svg>
-      <div className="absolute text-center">
-        <div className="text-2xl font-semibold tabular-nums text-slate-50">
-          {complete ? value : '—'}
-        </div>
-        <div className="text-[10px] uppercase tracking-wide text-slate-500">
-          Risk Score
-        </div>
-      </div>
+      <span className="absolute text-xl font-semibold tabular-nums text-slate-50">
+        {complete ? value : '—'}
+      </span>
     </div>
   )
 }
@@ -52,69 +46,60 @@ export function RiskDonut({ risk, size = 110 }) {
 export function LastReviewSummary({ result, onViewAll }) {
   if (!result) {
     return (
-      <section className={CARD}>
-        <Header title="Last Review Summary" />
-        <p className="px-5 pb-6 pt-2 text-sm text-slate-500">
-          No review yet. Paste code and hit <b className="text-slate-400">Run AI Review</b>.
-        </p>
+      <section className={`${CARD} px-4 py-3`}>
+        <h2 className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          Last review
+        </h2>
+        <p className="mt-2 text-sm text-slate-500">None yet.</p>
       </section>
     )
   }
 
   const security = result.security_issues?.length || 0
   const performance = result.performance_issues?.length || 0
+  const confirmed = (result.security_issues || []).filter((f) =>
+    String(f.source || '').startsWith('llm+'),
+  ).length
   const style = band(result.risk?.band)
   const seconds = secondsFrom(result.logs)
-  const testLines = result.generated_tests
-    ? result.generated_tests.split('\n').length
-    : 0
-  const patchLines = result.diff ? result.diff.split('\n').length : 0
+  const incomplete = result.risk?.complete === false
 
   return (
     <section className={CARD}>
-      <Header title="Last Review Summary" action="View All" onAction={onViewAll} />
+      <div className="flex items-center border-b border-slate-800 px-4 py-2.5">
+        <h2 className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          Last review
+        </h2>
+        <button
+          onClick={onViewAll}
+          className="ml-auto text-[11px] text-slate-500 hover:text-slate-300"
+        >
+          history
+        </button>
+      </div>
 
-      <div className="flex items-center gap-5 px-5 pb-4">
-        <div className="text-center">
-          <RiskDonut risk={result.risk} />
-          <span
-            className={`mt-2 inline-block rounded-md border px-2 py-0.5 text-[11px] ${style.chip}`}
-          >
-            {result.risk?.complete === false ? 'Unavailable' : style.label}
-          </span>
-        </div>
-
-        <div className="flex-1 space-y-2.5">
-          <p className="text-xs text-slate-500">Findings</p>
-          <Stat
-            icon={<Icon.shield width={14} height={14} />}
-            tone="text-rose-300"
-            value={security}
-            label="Security"
-          />
-          <Stat
-            icon={<Icon.alert width={14} height={14} />}
-            tone="text-amber-300"
-            value={performance}
-            label="Performance"
-          />
-          <Stat
-            icon={<Icon.check width={14} height={14} />}
-            tone="text-sky-300"
-            value={security + performance}
-            label="Total Issues"
-          />
+      <div className="flex items-center gap-4 px-4 py-3">
+        <RiskDonut risk={result.risk} />
+        <div className="min-w-0 flex-1 space-y-1 text-sm">
+          <p className={`font-medium ${style.text}`}>
+            {incomplete ? 'Score unavailable' : style.label}
+          </p>
+          <Row label="security" value={security} />
+          <Row label="performance" value={performance} />
+          {confirmed > 0 && (
+            <Row label="confirmed" value={confirmed} tone="text-emerald-400" />
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 border-t border-slate-800 px-5 py-4 text-center">
-        <Metric value={patchLines || '—'} label="Lines of Fix" />
-        <Metric value={testLines || '—'} label="Test Lines" />
-        <Metric value={seconds ? `~${seconds}s` : '—'} label="Processing Time" />
-      </div>
+      <dl className="grid grid-cols-3 gap-px border-t border-slate-800 bg-slate-800 text-center">
+        <Metric value={lineCount(result.diff)} label="patch" />
+        <Metric value={lineCount(result.generated_tests)} label="tests" />
+        <Metric value={seconds ? `${seconds}s` : '—'} label="took" />
+      </dl>
 
-      {result.risk?.complete === false && (
-        <p className="border-t border-rose-900/40 bg-rose-500/5 px-5 py-3 text-[11px] text-rose-300">
+      {incomplete && (
+        <p className="border-t border-rose-900/40 bg-rose-500/5 px-4 py-2.5 text-[11px] text-rose-300">
           {result.risk.note}
         </p>
       )}
@@ -122,97 +107,40 @@ export function LastReviewSummary({ result, onViewAll }) {
   )
 }
 
-export function SystemStatus({ backend, onViewGraph }) {
-  const online = backend?.status === 'ok'
-  const keyReady = backend?.groq_key_configured
-
-  const tone = !online
-    ? 'border-rose-700/50 bg-rose-950/30'
-    : keyReady
-      ? 'border-emerald-700/40 bg-emerald-950/20'
-      : 'border-amber-700/40 bg-amber-950/20'
-
-  return (
-    <section className={`rounded-xl border ${tone} p-4`}>
-      <div className="flex items-center gap-3">
-        <span
-          className={`grid h-9 w-9 place-items-center rounded-full border ${
-            online && keyReady
-              ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'
-              : 'border-amber-500/40 bg-amber-500/15 text-amber-300'
-          }`}
-        >
-          {online && keyReady ? (
-            <Icon.check width={17} height={17} />
-          ) : (
-            <Icon.alert width={17} height={17} />
-          )}
-        </span>
-
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-slate-100">
-            {!online
-              ? 'Backend unreachable'
-              : keyReady
-                ? 'System Online'
-                : 'No API key configured'}
-          </p>
-          <p className="truncate text-[11px] text-slate-500">
-            {online ? backend.model : 'Is the backend container running?'}
-          </p>
-        </div>
-
-        {online && (
-          <button
-            onClick={onViewGraph}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
-          >
-            View Graph
-            <Icon.arrow width={13} height={13} />
-          </button>
-        )}
-      </div>
-    </section>
-  )
-}
-
 export function RecentActivity({ entries, onSeeAll }) {
   return (
     <section className={CARD}>
-      <Header title="Recent Activity" action="See All" onAction={onSeeAll} />
+      <div className="flex items-center border-b border-slate-800 px-4 py-2.5">
+        <h2 className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          Recent
+        </h2>
+        {entries.length > 0 && (
+          <button
+            onClick={onSeeAll}
+            className="ml-auto text-[11px] text-slate-500 hover:text-slate-300"
+          >
+            all {entries.length}
+          </button>
+        )}
+      </div>
 
       {entries.length === 0 ? (
-        <p className="px-5 pb-6 pt-2 text-sm text-slate-500">
-          Nothing yet. Reviews you run in this browser show up here.
+        <p className="px-4 py-3 text-sm text-slate-500">
+          Reviews run in this browser appear here.
         </p>
       ) : (
-        <ul className="space-y-1 px-3 pb-4">
-          {entries.slice(0, 5).map((e) => {
+        <ul className="divide-y divide-slate-800/70">
+          {entries.slice(0, 6).map((e) => {
             const style = band(e.band)
             return (
-              <li
-                key={e.id}
-                className="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-slate-800/40"
-              >
-                <span
-                  className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg border ${style.chip}`}
-                >
-                  {e.failed?.length ? (
-                    <Icon.alert width={14} height={14} />
-                  ) : (
-                    <Icon.check width={14} height={14} />
-                  )}
+              <li key={e.id} className="flex items-baseline gap-2.5 px-4 py-2">
+                <span className={`w-9 shrink-0 font-mono text-xs ${style.text}`}>
+                  {e.complete && e.score !== null ? e.score : '—'}
                 </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-slate-200">
-                    {e.kind === 'pr' ? 'PR analyzed' : 'Review completed'}
-                    {e.score !== null && (
-                      <span className={`ml-2 text-xs ${style.text}`}>{e.score}/100</span>
-                    )}
-                  </p>
-                  <p className="truncate text-[11px] text-slate-500">{e.label}</p>
-                </div>
-                <span className="shrink-0 text-[11px] text-slate-600">
+                <span className="min-w-0 flex-1 truncate text-xs text-slate-400">
+                  {e.label}
+                </span>
+                <span className="shrink-0 font-mono text-[10px] text-slate-600">
                   {relativeTime(e.at)}
                 </span>
               </li>
@@ -226,39 +154,26 @@ export function RecentActivity({ entries, onSeeAll }) {
 
 /* ------------------------------------------------------------------ bits -- */
 
-function Header({ title, action, onAction }) {
+function Row({ label, value, tone = 'text-slate-300' }) {
   return (
-    <div className="flex items-center px-5 py-4">
-      <h2 className="text-base font-semibold text-slate-100">{title}</h2>
-      {action && (
-        <button
-          onClick={onAction}
-          className="ml-auto text-xs text-indigo-400 hover:text-indigo-300"
-        >
-          {action}
-        </button>
-      )}
-    </div>
-  )
-}
-
-function Stat({ icon, tone, value, label }) {
-  return (
-    <div className="flex items-center gap-2 text-sm">
-      <span className={tone}>{icon}</span>
-      <span className="font-semibold tabular-nums text-slate-100">{value}</span>
-      <span className="text-slate-400">{label}</span>
-    </div>
+    <p className="flex items-baseline gap-2 text-xs">
+      <span className={`font-mono font-semibold tabular-nums ${tone}`}>{value}</span>
+      <span className="text-slate-500">{label}</span>
+    </p>
   )
 }
 
 function Metric({ value, label }) {
   return (
-    <div>
-      <div className="text-lg font-semibold tabular-nums text-slate-100">{value}</div>
-      <div className="text-[10px] text-slate-500">{label}</div>
+    <div className="bg-slate-900/40 px-2 py-2.5">
+      <dd className="font-mono text-sm tabular-nums text-slate-200">{value}</dd>
+      <dt className="text-[10px] text-slate-600">{label}</dt>
     </div>
   )
+}
+
+function lineCount(text) {
+  return text ? text.split('\n').length : '—'
 }
 
 function secondsFrom(logs) {

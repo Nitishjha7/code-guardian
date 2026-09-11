@@ -36,11 +36,54 @@ Code-level sawaal [CODE_QA.md](CODE_QA.md) me hain; general concepts
 > regression test me. Aur ek audit agar fail ho jaaye, system **kabhi** "no issues
 > found" nahi bolta — wo poore review ko incomplete mark karta hai.
 >
-> Router ko naapa bhi hai: 20 labelled cases pe security recall 100%, zero false
-> negatives.
+> Router ko naapa bhi hai — aur **held-out set** pe: as-shipped security recall 100%,
+> zero false negatives, us data pe jispe kabhi tune nahi kiya.
 
 Teen cheezein isme jaan-boojh ke hain: **model control flow decide karta hai**,
 **deterministic scanner LLM ke saath fused hai**, aur **failure silence se alag hai**.
+
+---
+
+## 1b. "Ye to sab bana rahe hain" — iska jawab
+
+**Ye sawaal aayega, aur wo galat nahi hai.** "AI code reviewer" crowded hai —
+CodeRabbit, Greptile, Qodo, Sourcery, GitHub ka apna review. Aur "LangGraph
+multi-agent project" abhi portfolio me sabse zyada dikhne wala project hai.
+
+Isliye **product mat becho.** Product bechoge to wo sach me bolega "ye to sab
+bana rahe hain", aur wo sahi hoga.
+
+### Jawab ye hai
+
+> "Ye product ke liye nahi banaya. Domain isliye chuna kyunki iska **ground
+> truth measurable** hai — main keh sakta hoon ki mera agent sahi chala ya nahi.
+> Jo dikhana tha wo orchestration aur failure handling hai, code review nahi."
+
+Ye attack-proof hai, kyunki tum wo claim kar hi nahi rahe jo wo tod sakein.
+
+### Teen cheezein jo baaki candidates ke paas nahi hongi
+
+Idea common hai; **ye teen** portfolio projects me lagbhag kabhi nahi dikhti:
+
+1. **Silent-pass bug ki kahani.** System ne Critical SQL injection wale code pe
+   "0 findings" bola tha kyunki `ToolNode` exception ko plain text bana deta
+   hai. Pakda, schema level pe fix kiya, tests se pin kiya. Aur ye **production
+   me dobara dikha** — Groq rate limit lagi aur system ne `0/100 clean` nahi,
+   `unknown — incomplete` bola. Ye live demo kar sakte ho.
+2. **Agent naapa hua hai, aur held-out set pe naapa hai.** Zyadatar log apne
+   agent ko naapte hi nahi. Jo naapte hain wo held-out nahi rakhte.
+3. **Deterministic scanner LLM ke saath fused hai**, provenance tagging ke
+   saath. Zyadatar portfolio projects pure-LLM hote hain aur "hallucinate kare
+   to?" ka koi structural jawab nahi hota.
+
+### Jisse lead NAHI karna
+
+LangGraph, StateGraph, multi-agent, FastAPI, Docker — **table stakes**. Inse
+shuru karoge to project average lagega. Ye background me rehne do.
+
+**Seedhi baat:** is project ki strength architecture nahi hai — wo average hai.
+Strength engineering judgement hai, aur wo average nahi hai. §15 me iska poora
+assessment hai.
 
 ---
 
@@ -76,7 +119,7 @@ Kya nahi hai:
 - PR bot asli repo pe kabhi nahi chala (token chahiye)
 - Ek hi language ka static scanner (Bandit = Python only)
 - Koi persistence nahi — har review stateless hai
-- Eval set held-out nahi hai
+- Cost per review naapa nahi gaya
 
 Ye distinction khud bolna interviewer pe achha impression daalta hai. "Production-ready"
 bolna aur phir pakde jaana sabse bura outcome hai.
@@ -128,11 +171,28 @@ Naya agent = ek aur `@tool` + clear docstring. Graph topology same. **Docstring 
 routing logic hai** — aur ye prove hua: performance docstring ko criteria ki tarah
 rewrite karne se recall 33% → 50% gaya, bina koi edge chhue.
 
-### 6.2 Measured routing, not asserted
+### 6.2 Measured routing, on a held-out set
 
-20 labelled snippets, do modes. **Security recall 100%, zero false negatives.**
-Exit code threshold se neeche fail karta hai, to prompt/model change jo routing chupke
-se tode wo test ki tarah pakda jaata hai.
+Do labelled sets, do modes. Ye sabse strong number hai jo bol sakte ho:
+
+| Set | Mode | Security recall | Performance recall |
+|---|---|---|---|
+| dev (tuned against) | router-only | 90% | 50% |
+| dev (tuned against) | as-shipped | 100% | 67% |
+| **holdout (never tuned)** | router-only | **89%** | 43% |
+| **holdout (never tuned)** | as-shipped | **100%** | 57% |
+
+*Measured on `openai/gpt-oss-20b`, 20 cases per set.*
+
+Do baatein isme important hain:
+
+- **As-shipped security recall 100% hai us data pe bhi jo kabhi tune nahi hua.**
+  Backstop generalise karta hai.
+- **Dev aur holdout ka gap chhota hai** (90 → 89) — matlab docstring tuning ne
+  overfit nahi kiya. Ye khud check karna hi wo cheez hai jo log nahi karte.
+
+Exit code threshold se neeche fail karta hai, aur holdout chala ho to gate usi
+ka number padhta hai — kyunki wahi ek number contaminated nahi hai.
 
 ### 6.3 LLM + deterministic scanner fusion
 
@@ -191,10 +251,13 @@ Baaki languages pe security audit akela LLM hai. **Mitigation:** report me `sour
 field dikhta hai, to reviewer ko pata hota hai. Semgrep add karna ek aur `_run_*`
 function hai, aur kuch nahi badalta.
 
-### L4 — Eval set held-out nahi hai
+### L4 — Performance routing kamzor hai, aur holdout pe aur kam
 
-Isi pe tune kiya (33% → 50%). **Numbers optimistic hain.** README me likha hai.
-Real gate ke liye naye cases chahiye jinpe tune na kiya ho.
+Dev set pe 50%, holdout pe 43%. Security ke ulta, yahan koi backstop nahi hai
+jo bachaye. **Tolerable kyunki** errors asymmetric hain, aur ab ye naapa hua hai.
+
+*(Pehle yahan "eval held-out nahi hai" likha tha — wo ab fix ho chuka hai:
+`evals/routing_cases_holdout.py` 20 aise cases hain jinpe kabhi tune nahi kiya.)*
 
 ### L5 — Generated tests kabhi chale nahi
 
@@ -366,7 +429,7 @@ Groq model ids retire karta rehta hai. Ek baar phas chuke ho.
 | "MCP integration hai" | "PyGithub hai. Model-driven tool calling supervisor me hai" |
 | "Self-healing hai" | "Tests generate hote hain, execute nahi — sandbox alag project hai" |
 | "Production me chal raha hai" | "Working system hai; PR bot asli repo pe verify nahi hua" |
-| "Router 100% accurate hai" | "Security recall 100% on 20 cases, jinpe tune bhi kiya — held-out nahi" |
+| "Router 100% accurate hai" | "As-shipped security recall 100% on a held-out set of 20; router-only 89%. Performance routing 43% — wahi weak spot hai" |
 | "Performance audit strong hai" | "Routing recall 50% — yahi weak spot hai" |
 | "Cost X% kam karta hai" | "CSS pe 0.9s vs 11.4s; per-review cost naapa nahi" |
 
@@ -394,7 +457,7 @@ portfolio projects me aksar nahi hoti.
 
 ### Weaknesses — poochhe jaane se pehle jaan lo
 
-1. **Eval set held-out nahi hai.** Sabse pakde jaane layak baat.
+1. **Performance routing kamzor hai** — dev 50%, holdout 43%.
 2. **Performance routing 50%** hai.
 3. **Bandit sirf Python** — multi-language claim kamzor hai.
 4. **PR bot live verify nahi hua.**

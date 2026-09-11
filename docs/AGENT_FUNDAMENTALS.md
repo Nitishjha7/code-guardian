@@ -275,8 +275,23 @@ Jab errors ka cost barabar nahi hota, ek pe gate lagao aur doosri report karo.
 - Agar tune kiya, to numbers **optimistic** hain — aur ye bolna padta hai
 - Chhote set pe 100% ka confidence interval chauda hota hai
 
-> Ye khud bolna interview me sabse strong move hai: *"security recall 100% hai, lekin
-> maine isi set pe docstrings tune ki, to ye held-out nahi hai."*
+**Contamination pehchanna:** jis set pe tune kiya, wo ab measurement nahi rehta —
+wo training signal ban chuka hai. Aur ye chupke se hota hai: tum ek case fail
+dekhte ho, prompt sudharte ho, dobara chalate ho. Ab wo number us set pe achha
+hai aur kisi aur cheez pe nahi.
+
+Iska fix ek hi hai: **doosra set jispe kabhi tune na karo**, aur uska niyam likh
+do — *fail hone pe na case badlega na prompt.*
+
+> Sabse strong move: dono number do aur gap dikhao. *"Dev set pe 90%, held-out pe
+> 89% — ek point ka gap, matlab tuning ne overfit nahi kiya."* Ye "100%" bolne se
+> zyada bharosa deta hai, kyunki isme ye dikhta hai ki tumne **check kiya**.
+
+**Errored cases ko miss mat ginno.** Agar koi case rate limit ya timeout ki wajah
+se model tak pahuncha hi nahi, wo routing quality ke baare me kuch nahi kehta.
+Usko false negative ginoge to infrastructure problem model problem ki tarah
+dikhegi. Behtar: exclude karo, coverage report karo, aur coverage kam ho to
+**koi score mat do**.
 
 ### LLM-as-judge — kab aur kab nahi
 

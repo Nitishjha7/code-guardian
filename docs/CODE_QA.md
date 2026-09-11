@@ -385,16 +385,40 @@ baare me bolo.**
 
 ### Q31. Security recall 100% hai. Matlab router perfect hai?
 
-Nahi, aur ye khud bolna hai. Teen wajah:
+Nahi, aur ye khud bolna hai.
 
-1. **20 cases hain.** Ek chhota set hai; 100% ka confidence interval chauda hai.
-2. **Maine hi cases likhe aur maine hi label lagaye** — bias possible hai.
-3. **Sabse important: maine isi set pe tune kiya.** Performance docstring iske
-   feedback se badli (recall 33% → 50%). Yaani set **held-out nahi hai**, numbers
-   optimistic hain. Fresh set kam score karega.
+Pehle context: **do set hain.** `routing_cases.py` wo hai jispe docstrings tune
+ki (performance recall 33% → 50% usi feedback se), to uske numbers optimistic
+hain. Isliye `routing_cases_holdout.py` banaya — 20 aise cases jinpe **kabhi
+tune nahi kiya**, aur jo jaan-boojh ke mushkil hain: alag languages (Go, Java,
+SQL, shell), aur aise no-audit cases jinme "token"/"auth"/"query" jaise shabd
+harmless jagah pe hain, kyunki backstop unhi shabdon pe chalta hai.
 
-Ye README me bhi likha hai. Regression gate banana ho to naye cases likhne padenge
-aur unpe tune nahi karna hoga.
+Same model (`gpt-oss-20b`) pe:
+
+| Set | router-only | as-shipped |
+|---|---|---|
+| dev (tuned) | 90% | 100% |
+| holdout | **89%** | **100%** |
+
+Gap sirf 1 point hai — matlab tuning ne overfit nahi kiya. **Ye check karna hi
+wo cheez hai jo log nahi karte**, aur uska hona jawab ko strong banata hai.
+
+Phir bhi jo limitations bachi hain, wo khud bolo:
+
+1. **20 cases chhota set hai** — 100% ka confidence interval chauda hai.
+2. **Maine hi cases likhe aur label lagaye** — bias possible hai.
+3. **Ye numbers 20b pe hain**, default 120b pe nahi (us din uska daily quota
+   khatam ho gaya tha). 120b pe dobara chalana baaki hai.
+
+### Q31b. Holdout set ka niyam kya hai?
+
+`routing_cases_holdout.py` ke docstring me likha hai: **agar case fail ho, to
+case bhi nahi badalta aur wo prompt bhi nahi jispe wo fail hua.**
+
+Jo held-out set score dekhne ke baad edit ho jaaye, wo bas ek dheema dev set
+hai. Sirf genuine mislabel theek karna allowed hai — aur wo itna obvious hona
+chahiye ki tum run se *pehle* bhi theek karte.
 
 ### Q32. Performance recall sirf 50% hai. Ye to kharab hai.
 

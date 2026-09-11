@@ -11,7 +11,7 @@ Code Guardian is a multi-agent code auditing platform. It coordinates specialize
 > | Docs — 9 files: walkthrough, spec, code notes, code Q&A, interview notes, fundamentals, roadmap, setup, build & deploy | ✅ complete |
 > | LangGraph graph, tool-calling supervisor, 3 agents, guardrails | ✅ implemented |
 > | FastAPI `/api/review`, `/api/review-pr`, `/api/health`, `/api/graph` | ✅ implemented |
-> | React dashboard — sidebar, hero, risk donut, agent cards, side-by-side patch, activity feed, analytics | ✅ implemented |
+> | React dashboard — sidebar, risk donut, agent cards, side-by-side patch, history | ✅ implemented |
 > | Docker images + Compose stack | ✅ builds and runs |
 > | Phase 2: GitHub PR bot — `/webhook/github`, HMAC auth, PyGithub client | ✅ implemented |
 > | 2b static analysis · 2c risk score · 2d test generation | ✅ implemented |
@@ -22,7 +22,7 @@ Code Guardian is a multi-agent code auditing platform. It coordinates specialize
 > | Check | Result |
 > |---|---|
 > | 99 backend unit tests | pass |
-> | Routing eval, 20 labelled cases | security recall **100%** (0 false negatives); performance recall 50% |
+> | Routing eval, **held-out** set of 20 | as-shipped security recall **100%** (0 false negatives); router-only 89%; performance 43% |
 > | Static analysis fusion (vulnerable Python) | 8 raw findings → **5** after dedup; **3 confirmed by both engines**; Bandit added 2 SQLi sites the LLM missed |
 > | Risk score across the three samples | vulnerable Python **100/100 critical**, slow JS **10/100 low**, plain CSS **0/100 none** |
 > | Risk score on a failed audit | band `unknown`, "score unavailable" — never a reassuring number |
@@ -65,8 +65,8 @@ backend/app/mcp_clients/       # GitHub client (PyGithub): PR diffs, comments
 backend/app/risk.py            # Weighted risk score (findings + size, corroboration-aware)
 backend/app/agents/test_generator.py    # Regression tests (generated, never executed)
 backend/tests/                 # 99 unit tests for the LLM-free seams
-backend/evals/                 # 20 labelled snippets measuring routing recall
-frontend/src/components/       # Shell, Hero, ReviewPanel, AgentFindings, PatchView
+backend/evals/                 # 40 labelled snippets: 20 dev + 20 held-out
+frontend/src/components/       # Shell, ReviewPanel, AgentFindings, PatchView
 frontend/src/pages/            # Agents, Analytics, Settings, token-gated pages
 frontend/src/lib/              # Shared palette + browser-local review history
 docs/                          # 9 docs — start with PROJECT_WALKTHROUGH.md
@@ -160,49 +160,76 @@ Three things to show beyond the findings:
 §3a of the spec argues the supervisor should route instead of fanning out, and
 names the risk: a false negative (skipping the security audit on code that
 needed one) is far worse than the tokens a static fan-out would have wasted.
-`backend/evals/` turns that from a claim into a number — 20 labelled snippets,
-each marked for whether a competent reviewer would consider each audit worth
-paying for.
+`backend/evals/` turns that from a claim into a number — **two** sets of 20
+labelled snippets, each marked for whether a competent reviewer would consider
+each audit worth paying for.
+
+There are two sets because the first one stopped being trustworthy the moment it
+was useful:
+
+- **`routing_cases.py` (dev)** — used to *tune* the tool docstrings. Performance
+  recall moved 33% → 50% that way, which makes its numbers optimistic.
+- **`routing_cases_holdout.py` (held-out)** — never tuned against, and
+  deliberately harder: Go, Java, SQL and shell instead of the Python and JS the
+  docstrings were written for, plus no-audit cases that contain *token*, *auth*
+  and *query* in harmless positions, because the backstop keys off exactly those
+  words. The file's rule is that **a failing case changes neither the case nor
+  the prompt it failed on** — a held-out set you edit after seeing the score is
+  just a slower dev set.
 
 ```bash
-cd backend && python -m evals.run_routing_eval
+cd backend && python -m evals.run_routing_eval --set both --mode both
 # or: docker build -f backend/Dockerfile.eval -t cg-eval backend \
-#     && docker run --rm --env-file backend/.env cg-eval
+#     && docker run --rm --env-file backend/.env cg-eval --set holdout
 ```
 
-Measured on `openai/gpt-oss-120b`, 20 cases:
+Measured on `openai/gpt-oss-20b`, 20 cases per set:
 
-| Mode | Security recall | Security precision | Performance recall | Performance precision |
+| Set | Mode | Security recall | Security precision | Performance recall |
 |---|---|---|---|---|
-| `router-only` (LLM judgement alone) | **100%** | 83% | 50% | 100% |
-| `as-shipped` (router + high-stakes backstop) | **100%** | 83% | 67% | 33% |
+| dev (tuned against) | `router-only` | 90% | 82% | 50% |
+| dev (tuned against) | `as-shipped` | **100%** | 77% | 67% |
+| **held-out** | `router-only` | **89%** | 80% | 43% |
+| **held-out** | `as-shipped` | **100%** | 60% | 57% |
 
-Read honestly, that says three things:
+Read honestly, that says four things:
 
-- **Security recall is 100% — zero missed security audits.** This is the number
-  the design stakes itself on, and it holds with and without the backstop.
-- **Performance recall is the weak spot (50% router-only).** On three snippets
-  the model called the security auditor on code whose only real problem was
-  performance. That is a genuine limitation, not a rounding error. It is
-  tolerable only because the errors are asymmetric: a missed performance audit
-  costs an optimization suggestion, a missed security audit costs a
-  vulnerability. It is measured rather than hidden, which is the point.
-- **The backstop trades precision for safety, visibly.** It lifts performance
-  recall to 67% but drops precision to 33% — it fires on anything with an
-  auth/DB/exec keyword and pays for a performance audit that often finds
-  nothing. That is the intended trade (a false positive costs cents), and now
-  the cost is quantified rather than assumed.
+- **As-shipped security recall is 100% on data never tuned against.** This is
+  the number the design stakes itself on, and it survives contact with a fresh
+  set. It is the only claim here worth making loudly.
+- **The dev/held-out gap is one point on security** (90 → 89). The docstring
+  tuning generalised rather than overfitting — which is not something you get to
+  assume, only something you get to check.
+- **Performance recall is the weak spot, and worse on held-out** (50% → 43%).
+  The model calls the security auditor on code whose only real problem is
+  performance. Tolerable only because the errors are asymmetric: a missed
+  performance audit costs an optimization suggestion, a missed security audit
+  costs a vulnerability.
+- **The backstop trades precision for safety, visibly.** It lifts security
+  recall to 100% but drops precision to 60% on held-out — it fires on anything
+  with an auth/DB/exec keyword. That is the intended trade (a false positive
+  costs cents), now quantified rather than assumed.
 
 The exit code fails when as-shipped security recall drops below 100%
-(`--min-security-recall`), so a prompt or model change that quietly breaks
-routing fails the way a test does.
+(`--min-security-recall`), and when the held-out set was run the gate reads
+*its* number, because that is the only one not contaminated by tuning. A run
+where fewer than 80% of cases reached the model reports **no score at all** and
+exits non-zero — a routing number computed from cases that never ran would be
+fiction, which is the same rule the review graph follows.
 
-> **Caveat, stated plainly:** these 20 cases were used to *tune* the tool
-> docstrings (performance recall went 33% → 50% that way), so the numbers are
-> optimistic — the set is not held out. A fresh set would score lower. To use
-> this as a real regression gate, write new cases and do not tune against them.
+> **Remaining caveats:** 20 cases per set is small, so the interval around 100%
+> is wide; the cases are self-written and self-labelled; and these numbers are
+> from `gpt-oss-20b` rather than the default `gpt-oss-120b`, because the 120b
+> daily quota was exhausted that day. Re-running on 120b is outstanding.
 
 ## What the dashboard shows — and what it deliberately doesn't
+
+The UI is built to look like a tool, not a landing page. There is no hero
+banner, no tagline, no "AI agents working together" card, no gradient — those
+read as filler in something you are supposed to work in, and they are the
+tell that a UI was generated rather than designed. Five nav items, all of which
+do something. Anything that would have been decoration was deleted instead of
+styled.
 
 Every number on screen comes from a review that actually ran:
 
@@ -212,8 +239,9 @@ Every number on screen comes from a review that actually ran:
   browser only: clearing site data wipes them, and they do not follow you to another
   machine.
 - **`confirmed` badges** mark findings both the LLM and Bandit flagged independently.
-- **Repository, Pull Requests** — these say what they need (`GITHUB_TOKEN`, or repo
-  ingestion that does not exist yet) rather than rendering placeholder rows.
+- **Pull Requests** says what it needs (`GITHUB_TOKEN`) rather than rendering
+  placeholder rows. A "Repository" page was removed outright — repo-wide review is
+  not built, and a nav item that leads nowhere is worse than a missing one.
 - **No cost-per-review tile.** It has not been measured, and this project does not
   display numbers it has not measured.
 

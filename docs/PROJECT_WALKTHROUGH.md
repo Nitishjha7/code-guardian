@@ -182,6 +182,31 @@ The eval immediately earned its keep: **performance recall was 33%**. Rewriting 
 performance tool's docstring as explicit criteria moved it to 50%. Docstring changed →
 routing behaviour changed, with no edge rewiring. That is §3a's whole argument, observed.
 
+### Step 7b — A second set, because the first one stopped being a measurement
+
+Tuning against the set is what made it useful, and also what made its numbers
+untrustworthy: once a set has shaped the prompts, it is training signal, not evidence.
+
+So `routing_cases_holdout.py` — 20 cases never tuned against, deliberately harder in
+three ways: **different languages** (Go, Java, SQL, shell, rather than the Python and JS
+the docstrings were written for); **adversarial vocabulary** (no-audit cases containing
+*token*, *auth* and *query* in harmless positions — a `Token` dataclass, an `author`
+field, an `@media query` — because the backstop keys off exactly those words); and
+**split cases**, where code needs one auditor while loudly resembling the other.
+
+The file states its own rule: *a failing case changes neither the case nor the prompt it
+failed on.* A held-out set you edit after seeing the score is a slower dev set.
+
+Result on `gpt-oss-20b`: **as-shipped security recall 100% on both sets**, and
+router-only 89% held-out against 90% dev. A one-point gap means the docstring tuning
+generalised — which is not something you get to assume, only something you get to check.
+
+Writing it also exposed the eval's own version of the silent-pass bug. When the Groq
+daily quota ran out, 19 of 20 cases never reached the model, and the runner counted them
+as false negatives and printed **"security recall 11%"** — an infrastructure failure
+wearing a model failure's clothes. Errored cases are now excluded from scoring, and below 80%
+coverage the runner prints **no score at all** and exits non-zero.
+
 ### Step 8 — Fusing a deterministic scanner into the security audit
 
 [backend/app/agents/static_analysis.py](../backend/app/agents/static_analysis.py)
@@ -301,7 +326,8 @@ to measure on is a flaky test, which is worse than no test.
 | Check | Result |
 |---|---|
 | Unit tests | **99 pass**, no API key needed |
-| Routing eval, 20 cases | **security recall 100%** (0 false negatives); performance recall 50% router-only, 67% as-shipped |
+| Routing eval, **held-out** set (20 cases, never tuned) | **as-shipped security recall 100%** (0 false negatives); router-only 89%; performance 43% |
+| Routing eval, dev set (20 cases, tuned against) | as-shipped 100%; router-only 90%; performance 50% |
 | Static fusion, vulnerable Python | 8 raw findings → **5** after dedup; **3 confirmed by both engines**; Bandit added 2 SQLi sites the LLM missed |
 | Risk score | vulnerable Python **100/100 critical**, slow JS **10/100 low**, plain CSS **0/100 none** |
 | Failed audit | band `unknown`, "score unavailable", "Audit failed — this code was not checked" |

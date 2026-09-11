@@ -61,5 +61,4 @@ export const LANGUAGES = [
 ]
 
 /** Card shell used everywhere, so spacing and borders stay consistent. */
-export const CARD =
-  'rounded-xl border border-slate-800 bg-slate-900/50 backdrop-blur-sm'
+export const CARD = 'rounded-lg border border-slate-800 bg-slate-900/40'

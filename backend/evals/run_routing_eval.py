@@ -28,6 +28,9 @@ from dataclasses import dataclass
 
 from app.agents import supervisor
 from evals.routing_cases import CASES, RoutingCase
+from evals.routing_cases_holdout import HOLDOUT_CASES
+
+SETS = {"dev": CASES, "holdout": HOLDOUT_CASES}
 
 MODES = ("router-only", "as-shipped")
 
@@ -60,9 +63,16 @@ def decide(case: RoutingCase, mode: str) -> Outcome:
 
 
 def _scores(outcomes: list[Outcome], attr: str) -> tuple[float, float, int, int]:
-    """Return ``(recall, precision, false_negatives, false_positives)``."""
+    """Return ``(recall, precision, false_negatives, false_positives)``.
+
+    Errored cases are **excluded**, not counted as misses. A case that never
+    reached the model says nothing about routing quality, and scoring it as a
+    false negative turns an infrastructure problem (a 429, a dead model id) into
+    what looks like a model problem - the same mistake the graph's ok/error
+    envelope exists to prevent. The caller reports how many were excluded.
+    """
     tp = fn = fp = 0
-    for outcome in outcomes:
+    for outcome in (o for o in outcomes if not o.error):
         expected = getattr(outcome.case, f"needs_{attr}")
         actual = getattr(outcome, attr)
         if expected and actual:
@@ -76,10 +86,10 @@ def _scores(outcomes: list[Outcome], attr: str) -> tuple[float, float, int, int]
     return recall, precision, fn, fp
 
 
-def run(mode: str) -> list[Outcome]:
+def run(mode: str, cases: list[RoutingCase]) -> list[Outcome]:
     print(f"\n=== mode: {mode} ===")
     outcomes: list[Outcome] = []
-    for case in CASES:
+    for case in cases:
         outcome = decide(case, mode)
         outcomes.append(outcome)
 
@@ -105,20 +115,46 @@ def run(mode: str) -> list[Outcome]:
     return outcomes
 
 
-def report(mode: str, outcomes: list[Outcome]) -> float:
+# Below this fraction of cases actually reaching the model, the run is not a
+# measurement of anything and must not produce a number.
+_MIN_COVERAGE = 0.8
+
+
+def report(mode: str, outcomes: list[Outcome]) -> float | None:
+    """Print the scores. Returns None when the run was too incomplete to score."""
     errors = [o for o in outcomes if o.error]
+    scored = len(outcomes) - len(errors)
+    coverage = scored / len(outcomes) if outcomes else 0.0
+
     if errors:
-        print(f"\n  {len(errors)} case(s) errored - results below are not meaningful.")
+        reason = errors[0].error[:90]
+        print(f"\n  {len(errors)}/{len(outcomes)} case(s) never reached the model.")
+        print(f"  first error: {reason}")
+
+    if coverage < _MIN_COVERAGE:
+        # Refusing to print a number here is the same rule the review graph
+        # follows: a run that did not happen is not a clean result.
+        print(
+            f"\n  INCONCLUSIVE - only {coverage:.0%} of cases ran. "
+            "No score is reported, because a routing number computed from "
+            "cases that never reached the model would be fiction."
+        )
+        return None
 
     sec_recall, sec_precision, sec_fn, sec_fp = _scores(outcomes, "security")
     perf_recall, perf_precision, perf_fn, perf_fp = _scores(outcomes, "performance")
 
-    print(f"\n  security     recall {sec_recall:.0%}  precision {sec_precision:.0%}"
+    print(f"\n  scored {scored}/{len(outcomes)} cases")
+    print(f"  security     recall {sec_recall:.0%}  precision {sec_precision:.0%}"
           f"   (false negatives: {sec_fn}, false positives: {sec_fp})")
     print(f"  performance  recall {perf_recall:.0%}  precision {perf_precision:.0%}"
           f"   (false negatives: {perf_fn}, false positives: {perf_fp})")
 
-    missed = [o.case.id for o in outcomes if o.case.needs_security and not o.security]
+    missed = [
+        o.case.id
+        for o in outcomes
+        if not o.error and o.case.needs_security and not o.security
+    ]
     if missed:
         print(f"  MISSED SECURITY AUDITS: {', '.join(missed)}")
     return sec_recall
@@ -128,6 +164,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=(*MODES, "both"), default="both")
     parser.add_argument(
+        "--set",
+        dest="case_set",
+        choices=(*SETS, "both"),
+        default="dev",
+        help=(
+            "dev = the set the docstrings were tuned against (optimistic); "
+            "holdout = never tuned against, the honest number"
+        ),
+    )
+    parser.add_argument(
         "--min-security-recall",
         type=float,
         default=1.0,
@@ -136,17 +182,31 @@ def main() -> int:
     args = parser.parse_args()
 
     modes = MODES if args.mode == "both" else (args.mode,)
+    names = tuple(SETS) if args.case_set == "both" else (args.case_set,)
     shipped_recall = None
 
-    print(f"Routing eval - {len(CASES)} labelled cases")
-    for mode in modes:
-        outcomes = run(mode)
-        recall = report(mode, outcomes)
-        if mode == "as-shipped":
-            shipped_recall = recall
+    for name in names:
+        cases = SETS[name]
+        label = "tuned against - optimistic" if name == "dev" else "never tuned against"
+        print(f"\n##### set: {name} ({len(cases)} cases, {label}) #####")
+        for mode in modes:
+            outcomes = run(mode, cases)
+            recall = report(mode, outcomes)
+            # The gate reads the holdout set when it was run, because that is
+            # the only number not contaminated by tuning.
+            if (
+                mode == "as-shipped"
+                and recall is not None
+                and (name == "holdout" or shipped_recall is None)
+            ):
+                shipped_recall = recall
 
     if shipped_recall is None:
-        return 0
+        # Either as-shipped was not run, or the run was inconclusive. Exit
+        # non-zero for the second case: a gate that passes when it could not
+        # measure anything is worse than no gate.
+        print("\nNO VERDICT - as-shipped security recall was not measured.")
+        return 1 if "as-shipped" in modes else 0
 
     if shipped_recall < args.min_security_recall:
         print(

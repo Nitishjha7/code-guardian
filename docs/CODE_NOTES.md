@@ -473,10 +473,40 @@ se todta hai, wo test ki tarah fail hota hai.
 
 **Recall gate hai, precision sirf report hoti hai** — errors symmetric nahi hain.
 
-### Imaandaar caveat
+### Do sets — aur dusra kyun banana pada
 
-Ye 20 cases **tune karne me use hue** (performance recall 33% → 50%). Matlab set
-held-out nahi hai, numbers optimistic hain. Fresh set kam score karega.
+`routing_cases.py` (dev) **tune karne me use hua** (performance recall 33% →
+50%). Jis set pe tune kiya, uske numbers optimistic hote hain — wo measurement
+nahi rehta.
+
+Isliye `routing_cases_holdout.py`: 20 aise cases jinpe **kabhi tune nahi kiya**,
+aur jaan-boojh ke mushkil —
+
+- **alag languages** (Go, Java, SQL, shell) — docstrings Python/JS ke liye likhi thi
+- **adversarial vocabulary** — no-audit cases jinme `token`, `auth`, `query`
+  harmless jagah pe hain (`Token` dataclass, `author` field, `@media query`).
+  Ye test karte hain ki model **code padh raha hai** ya sirf shabd match kar raha
+  hai — kyunki backstop unhi shabdon pe chalta hai.
+- **split cases** — security fix jo ek hot loop ke andar hai, cache jisme koi
+  security surface nahi
+
+**File ka niyam (uske docstring me likha hai):** agar case fail ho, to **na case
+badlega na wo prompt** jispe wo fail hua. Jo held-out set score dekhne ke baad
+edit ho jaaye, wo bas ek dheema dev set hai.
+
+Result (`gpt-oss-20b`): as-shipped security recall dono set pe **100%**.
+Router-only 89% holdout vs 90% dev — ek point ka gap, matlab tuning ne overfit
+nahi kiya.
+
+### `_MIN_COVERAGE` — eval ka apna silent-pass
+
+Pehla version me errored cases **false negatives** me gin rahe the. Rate limit
+lagi to eval ne "security recall 11%" chhaap diya — jo routing failure lagta hai
+jabki wo infrastructure failure tha.
+
+Ab errored cases score se **exclude** hote hain, aur 80% se kam cases chale to
+**koi number chhapta hi nahi** — `INCONCLUSIVE`, exit 1. Wahi rule jo review
+graph follow karta hai: jo run hua hi nahi, wo clean result nahi hai.
 
 ---
 
@@ -506,6 +536,34 @@ aur PyGithub calls (token + live PR chahiye).
 Dashboard shell: sidebar nav, top bar, hero pipeline strip, review panel
 (paste / GitHub PR / upload), agent finding cards, side-by-side patch, aur right
 rail me system status + last review + recent activity.
+
+### UI "AI-generated" na lage — iske liye kya hataya
+
+Pehla version me hero banner tha, tagline tha, ek quote box ("Better Code, A
+Safer Tomorrow"), sidebar me "AI Agents Working Together" wala promo card, aur
+gradients. **Sab hata diya.**
+
+Wajah: jis cheez me banda kaam karta hai, usme marketing copy filler lagti hai —
+aur wahi sabse bada tell hoti hai ki UI generate kiya gaya hai, design nahi.
+Linear, Vercel, GitHub — koi bhi tool apne hi dashboard pe apna tagline nahi
+likhta.
+
+Jo niyam lagaya: **jo decorate karne layak tha use delete kiya, style nahi
+kiya.**
+
+| Hataya | Kyun |
+|---|---|
+| Hero banner + tagline | tool me marketing copy |
+| Quote box | pure decoration |
+| Sidebar promo card | filler |
+| 5 static pipeline chips | kabhi badalte nahi the |
+| "Repository" page | kuch karta hi nahi tha |
+| "Dashboard" page | "Code Review" ka duplicate tha |
+| 7 unused icons | dead code |
+| Gradients, blur | tool ko presentation deck bana rahe the |
+
+Nav ab **5 items** hai, aur paanchon kuch karte hain. Health status ek badge me
+aa gaya top bar me (`● openai/gpt-oss-120b`) — alag card ki zaroorat nahi thi.
 
 ### Routing library kyun nahi hai
 

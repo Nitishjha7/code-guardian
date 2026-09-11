@@ -1,15 +1,8 @@
 import { useRef, useState } from 'react'
 import Editor from '@monaco-editor/react'
 
-import { Icon } from './Icons'
 import { SAMPLES } from '../samples'
 import { CARD, LANGUAGES } from '../lib/ui'
-
-const TABS = [
-  { id: 'paste', label: 'Paste Code' },
-  { id: 'pr', label: 'GitHub PR' },
-  { id: 'upload', label: 'Upload File' },
-]
 
 const EXT_LANGUAGE = {
   py: 'python',
@@ -44,8 +37,6 @@ export default function ReviewPanel({
   const [prUrl, setPrUrl] = useState('')
   const fileInput = useRef(null)
 
-  const lineCount = code ? code.split('\n').length : 0
-
   function loadSample(id) {
     const sample = SAMPLES.find((s) => s.id === id)
     if (!sample) return
@@ -69,39 +60,19 @@ export default function ReviewPanel({
 
   return (
     <section className={CARD}>
-      <div className="flex flex-wrap items-center gap-3 border-b border-slate-800 px-5 py-4">
-        <h2 className="text-base font-semibold text-slate-100">Review Code</h2>
-
-        <div className="ml-auto flex items-center gap-2">
-          <label className="text-xs text-slate-500">Language</label>
-          <select
-            value={language}
-            onChange={(e) => setLanguage(e.target.value)}
-            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-indigo-500"
-          >
-            {LANGUAGES.map((l) => (
-              <option key={l} value={l}>
-                {l.charAt(0).toUpperCase() + l.slice(1)}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div className="flex gap-1 border-b border-slate-800 px-4">
-        {TABS.map(({ id, label }) => (
-          <button
-            key={id}
-            onClick={() => (id === 'upload' ? fileInput.current?.click() : setTab(id))}
-            className={`px-4 py-2.5 text-sm transition ${
-              tab === id
-                ? 'border-b-2 border-indigo-500 text-slate-100'
-                : 'border-b-2 border-transparent text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-1 border-b border-slate-800 px-2">
+        <Tab active={tab === 'paste'} onClick={() => setTab('paste')}>
+          Code
+        </Tab>
+        <Tab active={tab === 'pr'} onClick={() => setTab('pr')}>
+          Pull request
+        </Tab>
+        <button
+          onClick={() => fileInput.current?.click()}
+          className="px-3 py-2 text-sm text-slate-500 hover:text-slate-300"
+        >
+          Upload
+        </button>
         <input
           ref={fileInput}
           type="file"
@@ -113,10 +84,10 @@ export default function ReviewPanel({
         <select
           onChange={(e) => loadSample(e.target.value)}
           value=""
-          className="my-auto ml-auto rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-300 outline-none"
+          className="ml-auto my-1 rounded border border-slate-800 bg-slate-900 px-2 py-1 text-xs text-slate-400 outline-none"
         >
           <option value="" disabled>
-            Load a sample…
+            sample…
           </option>
           {SAMPLES.map((s) => (
             <option key={s.id} value={s.id}>
@@ -126,12 +97,11 @@ export default function ReviewPanel({
         </select>
       </div>
 
-      <div className="grid gap-5 p-5 xl:grid-cols-[1.45fr_1fr]">
-        {/* ---------------------------------------------------- editor ---- */}
-        <div>
-          <div className="overflow-hidden rounded-lg border border-slate-800 bg-[#0d1117]">
+      {tab === 'paste' ? (
+        <>
+          <div className="overflow-hidden border-b border-slate-800 bg-[#0d1117]">
             <Editor
-              height="240px"
+              height="260px"
               theme="vs-dark"
               language={language}
               value={code}
@@ -139,28 +109,39 @@ export default function ReviewPanel({
               options={{
                 minimap: { enabled: false },
                 fontSize: 13,
-                lineNumbers: 'on',
                 scrollBeyondLastLine: false,
                 automaticLayout: true,
-                padding: { top: 12, bottom: 12 },
+                padding: { top: 10, bottom: 10 },
                 renderLineHighlight: 'none',
+                overviewRulerLanes: 0,
               }}
             />
-            <div className="flex items-center gap-2 border-t border-slate-800 px-3 py-2 text-xs text-slate-500">
-              <Icon.file width={14} height={14} />
-              <input
-                value={filename}
-                onChange={(e) => setFilename(e.target.value)}
-                className="w-40 bg-transparent text-slate-400 outline-none focus:text-slate-200"
-              />
-              <span className="ml-auto">{lineCount} lines</span>
-            </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 px-3 py-2.5">
+            <input
+              value={filename}
+              onChange={(e) => setFilename(e.target.value)}
+              className="w-32 bg-transparent font-mono text-xs text-slate-400 outline-none focus:text-slate-200"
+            />
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="rounded border border-slate-800 bg-slate-900 px-2 py-1 font-mono text-xs text-slate-400 outline-none"
+            >
+              {LANGUAGES.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+            <span className="font-mono text-xs text-slate-600">
+              {code ? code.split('\n').length : 0} lines
+            </span>
+
             <label
-              className="flex items-center gap-2 text-xs text-slate-400"
-              title="Bypass the supervisor's routing and run every auditor. For high-stakes paths where a false negative is unacceptable."
+              className="flex items-center gap-1.5 text-xs text-slate-500"
+              title="Bypass routing and run every auditor. For paths where a false negative is unacceptable."
             >
               <input
                 type="checkbox"
@@ -168,64 +149,59 @@ export default function ReviewPanel({
                 onChange={(e) => setForceFullAudit(e.target.checked)}
                 className="accent-indigo-500"
               />
-              Force full audit
+              force full audit
             </label>
 
             <button
               onClick={onRun}
               disabled={loading || !code.trim()}
-              className="ml-auto flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-lg shadow-indigo-950/40 transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+              className="ml-auto rounded bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {loading ? 'Reviewing…' : 'Run AI Review'}
-              {!loading && <Icon.arrow width={16} height={16} />}
+              {loading ? 'Reviewing…' : 'Review'}
             </button>
           </div>
-        </div>
-
-        {/* -------------------------------------------------------- PR ---- */}
-        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-5">
-          <div className="flex items-center gap-3">
-            <span className="grid h-9 w-9 place-items-center rounded-lg border border-slate-700 bg-slate-800 text-slate-300">
-              <Icon.github width={18} height={18} />
-            </span>
-            <p className="text-sm font-medium text-slate-200">
-              Or analyze a GitHub Pull Request
-            </p>
+        </>
+      ) : (
+        <div className="space-y-2.5 p-3">
+          <div className="flex gap-2">
+            <input
+              value={prUrl}
+              onChange={(e) => setPrUrl(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && prUrl.trim() && onRunPR(prUrl)}
+              placeholder="https://github.com/owner/repo/pull/42"
+              className="min-w-0 flex-1 rounded border border-slate-800 bg-slate-950 px-3 py-2 font-mono text-sm text-slate-200 outline-none placeholder:text-slate-700 focus:border-indigo-600"
+            />
+            <button
+              onClick={() => onRunPR(prUrl)}
+              disabled={prLoading || !prUrl.trim() || !tokenReady}
+              className="shrink-0 rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {prLoading ? 'Reading…' : 'Analyze'}
+            </button>
           </div>
-
-          <input
-            value={prUrl}
-            onChange={(e) => setPrUrl(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && prUrl.trim() && onRunPR(prUrl)}
-            placeholder="https://github.com/owner/repo/pull/42"
-            className="mt-4 w-full rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2.5 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-indigo-500"
-          />
-
-          <button
-            onClick={() => onRunPR(prUrl)}
-            disabled={prLoading || !prUrl.trim() || !tokenReady}
-            className="mt-3 w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {prLoading ? 'Analyzing PR…' : 'Analyze PR'}
-          </button>
-
-          <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
-            {tokenReady ? (
-              <>
-                Reads the lines the PR <b className="text-slate-400">adds</b> and returns
-                the review. It does <b className="text-slate-400">not</b> post a comment —
-                only the webhook does that.
-              </>
-            ) : (
-              <>
-                Needs <code className="text-slate-400">GITHUB_TOKEN</code> in
-                <code className="text-slate-400"> backend/.env</code>. Without it the
-                backend cannot read pull requests.
-              </>
-            )}
+          <p className="text-xs text-slate-600">
+            {tokenReady
+              ? 'Reviews the lines the PR adds. Posts nothing — the comment is returned for preview.'
+              : 'Needs GITHUB_TOKEN in backend/.env.'}{' '}
+            Accepts <code className="text-slate-500">owner/repo#42</code> too.
           </p>
         </div>
-      </div>
+      )}
     </section>
+  )
+}
+
+function Tab({ active, onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3 py-2 text-sm transition ${
+        active
+          ? 'border-b-2 border-indigo-500 text-slate-100'
+          : 'border-b-2 border-transparent text-slate-500 hover:text-slate-300'
+      }`}
+    >
+      {children}
+    </button>
   )
 }

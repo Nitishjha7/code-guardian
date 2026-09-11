@@ -3,19 +3,14 @@ import { useEffect, useRef, useState } from 'react'
 import { health, review, reviewPR } from './api'
 import { SAMPLES } from './samples'
 import { CARD, band } from './lib/ui'
-import { fromPR, fromReview, load, record, relativeTime } from './lib/history'
+import { fromPR, fromReview, load, record } from './lib/history'
 
 import { Icon } from './components/Icons'
 import { MobileNav, Sidebar, TopBar } from './components/Shell'
-import Hero from './components/Hero'
 import ReviewPanel from './components/ReviewPanel'
 import AgentFindings from './components/AgentFindings'
 import PatchView from './components/PatchView'
-import {
-  LastReviewSummary,
-  RecentActivity,
-  SystemStatus,
-} from './components/Summary'
+import { LastReviewSummary, RecentActivity } from './components/Summary'
 import {
   AgentsPage,
   AnalyticsPage,
@@ -26,7 +21,7 @@ import {
 } from './pages/Pages'
 
 export default function App() {
-  const [page, setPage] = useState('dashboard')
+  const [page, setPage] = useState('review')
   const [backend, setBackend] = useState(null)
 
   const [code, setCode] = useState(SAMPLES[0].code)
@@ -69,7 +64,7 @@ export default function App() {
       setResult(data)
       setReviewedSource(code)
       setEntries(record(fromReview(data, { label: filename, language })))
-      setPage('dashboard')
+      setPage('review')
       requestAnimationFrame(() =>
         resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
       )
@@ -101,7 +96,7 @@ export default function App() {
     setResult(null)
     setPrResult(null)
     setError(null)
-    setPage('dashboard')
+    setPage('review')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -131,10 +126,10 @@ export default function App() {
       <div className="flex">
         <Sidebar page={page} onNavigate={setPage} />
 
-        <main className="min-w-0 flex-1 space-y-5 p-5">
+        <main className="min-w-0 flex-1 space-y-4 p-4">
           {error && (
-            <div className="flex items-start gap-3 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-              <Icon.alert className="mt-0.5 shrink-0" width={17} height={17} />
+            <div className="flex items-start gap-2.5 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3.5 py-2.5 text-sm text-rose-200">
+              <Icon.alert className="mt-0.5 shrink-0" width={16} height={16} />
               <span className="flex-1">{error}</span>
               <button
                 onClick={() => setError(null)}
@@ -145,94 +140,54 @@ export default function App() {
             </div>
           )}
 
-          {page === 'dashboard' && (
-            <>
-              <Hero />
-
-              <div className="grid gap-5 xl:grid-cols-[1fr_340px]">
-                <div className="space-y-5">
-                  {panel}
-
-                  <div ref={resultsRef} className="space-y-5">
-                    {loading && <Working />}
-                    {result && !loading && (
-                      <>
-                        <AgentFindings result={result} onOpenFinding={setOpenFinding} />
-                        <PatchView result={result} original={reviewedSource} />
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                <aside className="space-y-5">
-                  <SystemStatus backend={backend} onViewGraph={() => setPage('agents')} />
-                  <LastReviewSummary
-                    result={result}
-                    onViewAll={() => setPage('analytics')}
-                  />
-                  <RecentActivity
-                    entries={entries}
-                    onSeeAll={() => setPage('analytics')}
-                  />
-                </aside>
-              </div>
-            </>
-          )}
-
           {page === 'review' && (
-            <div className="space-y-5">
-              <PageHead
-                title="Code Review"
-                subtitle="The full report for the last review you ran."
-              />
-              {panel}
-              {loading && <Working />}
-              {result && !loading ? (
-                <>
-                  <AgentFindings result={result} onOpenFinding={setOpenFinding} />
-                  <PatchView result={result} original={reviewedSource} />
-                </>
-              ) : (
-                !loading && (
-                  <EmptyCard
-                    icon={Icon.review}
-                    title="No review yet"
-                    text="Run a review above and the full report — findings, patch, generated tests, markdown and the agent log — appears here."
-                  />
-                )
-              )}
+            <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
+              <div className="min-w-0 space-y-4">
+                {panel}
+
+                <div ref={resultsRef} className="space-y-4">
+                  {loading && <Working />}
+                  {result && !loading && (
+                    <>
+                      <AgentFindings result={result} onOpenFinding={setOpenFinding} />
+                      <PatchView result={result} original={reviewedSource} />
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <aside className="space-y-4">
+                <LastReviewSummary
+                  result={result}
+                  onViewAll={() => setPage('analytics')}
+                />
+                <RecentActivity
+                  entries={entries}
+                  onSeeAll={() => setPage('analytics')}
+                />
+              </aside>
             </div>
           )}
 
           {page === 'pulls' && (
             <TokenGatedPage
               title="Pull Requests"
-              subtitle="Review a PR on demand. Nothing is posted — only the webhook comments."
+              subtitle="Reviews the lines a PR adds. Posts nothing — only the webhook comments."
               icon={Icon.pr}
               tokenReady={tokenReady}
-              blurb="Reading pull requests needs a GitHub token with repo scope. Add it and restart the backend; the webhook additionally needs GITHUB_WEBHOOK_SECRET."
+              blurb="Reading pull requests needs a GitHub token with repo scope. Add GITHUB_TOKEN to backend/.env and restart; the webhook additionally needs GITHUB_WEBHOOK_SECRET."
             >
               {panel}
-              {prLoading && <Working label="Reading the PR and reviewing added lines…" />}
+              {prLoading && <Working label="Reading the PR, reviewing added lines…" />}
               {prResult && !prLoading && <PRResult data={prResult} />}
               {!prResult && !prLoading && (
                 <EmptyCard
                   icon={Icon.pr}
-                  title="No pull request analyzed yet"
-                  text="Paste a github.com PR link above. Only the lines the PR adds are reviewed — flagging untouched code is noise the author cannot act on."
+                  title="No pull request analyzed"
+                  text="Paste a github.com PR link above. Only added lines are reviewed — flagging untouched code is noise the author cannot act on in this PR."
                 />
               )}
             </TokenGatedPage>
-          )}
-
-          {page === 'repository' && (
-            <TokenGatedPage
-              title="Repository"
-              subtitle="Repository-wide review is not built."
-              icon={Icon.repo}
-              tokenReady={false}
-              blurb="Reviewing a whole repository needs repo ingestion and multi-file context — a separate project, deliberately deferred (see docs/ROADMAP.md). Today the system reviews a submission or the lines a PR adds."
-            />
           )}
 
           {page === 'analytics' && (
@@ -252,20 +207,29 @@ export default function App() {
   )
 }
 
+function Working({ label = 'Routing the submission…' }) {
+  return (
+    <div className={`${CARD} flex items-center gap-3 px-4 py-5`}>
+      <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-700 border-t-indigo-400" />
+      <p className="text-sm text-slate-400">{label}</p>
+    </div>
+  )
+}
+
 function FindingDetail({ finding, onClose }) {
   const source = String(finding.source || 'llm')
   const confirmed = source.startsWith('llm+')
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/80 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/85 p-4"
       onClick={onClose}
     >
       <div
         className={`${CARD} max-h-[85vh] w-full max-w-2xl overflow-auto bg-slate-900`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start gap-3 border-b border-slate-800 px-5 py-4">
+        <div className="flex items-start gap-3 border-b border-slate-800 px-4 py-3">
           <span
             className={`shrink-0 rounded border px-2 py-0.5 text-[11px] font-medium ${
               band(finding.severity?.toLowerCase()).chip
@@ -279,9 +243,9 @@ function FindingDetail({ finding, onClose }) {
           </button>
         </div>
 
-        <div className="space-y-4 px-5 py-4 text-sm">
+        <div className="space-y-3.5 px-4 py-3.5 text-sm">
           {finding.line_hint && (
-            <pre className="overflow-x-auto rounded-lg border border-slate-800 bg-[#0d1117] px-3 py-2 text-xs text-slate-300">
+            <pre className="overflow-x-auto rounded border border-slate-800 bg-[#0d1117] px-3 py-2 text-xs text-slate-300">
               {finding.line_hint}
             </pre>
           )}
@@ -331,20 +295,6 @@ function Block({ label, text }) {
   )
 }
 
-function Working({ label = 'Supervisor is routing the submission…' }) {
-  return (
-    <div className={`${CARD} flex items-center gap-4 px-5 py-8`}>
-      <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-700 border-t-indigo-400" />
-      <div>
-        <p className="text-sm text-slate-300">{label}</p>
-        <p className="mt-0.5 text-xs text-slate-500">
-          Routing, then the chosen auditors, patch, tests and guardrails.
-        </p>
-      </div>
-    </div>
-  )
-}
-
 function PRResult({ data }) {
   const scored = data.files.filter((f) => f.risk?.complete)
   const worst = scored.reduce(
@@ -354,40 +304,33 @@ function PRResult({ data }) {
   const style = band(worst?.risk?.band)
 
   return (
-    <div className="space-y-5">
-      <div className={`${CARD} p-5`}>
-        <div className="flex flex-wrap items-center gap-4">
-          <div>
-            <h2 className="text-base font-semibold text-slate-100">
-              {data.repository}
-              <span className="text-slate-500">#{data.number}</span>
-            </h2>
-            <p className="mt-0.5 text-xs text-slate-500">
-              {data.files.length} file{data.files.length === 1 ? '' : 's'} reviewed ·
-              highest-risk file shown, not an average
-            </p>
-          </div>
-          {worst && (
-            <span
-              className={`ml-auto rounded-lg border px-3 py-1.5 text-sm font-medium ${style.chip}`}
-            >
-              {worst.risk.score}/100 · {style.label}
-            </span>
-          )}
-        </div>
+    <div className="space-y-4">
+      <div className={`${CARD} flex flex-wrap items-center gap-3 px-4 py-3`}>
+        <h2 className="text-sm font-medium text-slate-100">
+          {data.repository}
+          <span className="text-slate-500">#{data.number}</span>
+        </h2>
+        <span className="text-xs text-slate-500">
+          {data.files.length} file{data.files.length === 1 ? '' : 's'} · worst file, not
+          an average
+        </span>
+        {worst && (
+          <span className={`ml-auto rounded border px-2.5 py-1 text-xs ${style.chip}`}>
+            {worst.risk.score}/100 · {style.label}
+          </span>
+        )}
       </div>
 
       {data.files.map((f) => (
-        <div key={f.filename} className={`${CARD} p-5`}>
-          <div className="flex flex-wrap items-center gap-3">
-            <Icon.file width={15} height={15} className="text-slate-500" />
+        <div key={f.filename} className={`${CARD} px-4 py-3`}>
+          <div className="flex flex-wrap items-center gap-2.5">
             <code className="text-sm text-slate-200">{f.filename}</code>
-            <span className="rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400">
+            <span className="rounded border border-slate-800 bg-slate-900 px-1.5 py-0.5 font-mono text-[10px] text-slate-500">
               {f.language}
             </span>
-            <span className="text-[11px] text-slate-600">+{f.additions}</span>
+            <span className="font-mono text-[11px] text-emerald-500">+{f.additions}</span>
             <span
-              className={`ml-auto rounded-md border px-2 py-0.5 text-[11px] ${
+              className={`ml-auto rounded border px-2 py-0.5 text-[11px] ${
                 band(f.risk?.band).chip
               }`}
             >
@@ -396,12 +339,12 @@ function PRResult({ data }) {
           </div>
 
           {f.failed_audits?.length > 0 && (
-            <p className="mt-3 rounded-md border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-xs text-rose-300">
+            <p className="mt-2.5 rounded border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-xs text-rose-300">
               {f.failed_audits.join(', ')} did not run — this file was not fully checked.
             </p>
           )}
 
-          <ul className="mt-3 space-y-1.5">
+          <ul className="mt-2.5 space-y-1.5">
             {[...f.security_issues, ...f.performance_issues].map((x, i) => (
               <li key={i} className="flex items-start gap-2 text-xs">
                 <span
@@ -416,22 +359,20 @@ function PRResult({ data }) {
             ))}
             {f.security_issues.length + f.performance_issues.length === 0 &&
               !f.failed_audits?.length && (
-                <li className="text-xs text-emerald-300">No issues in the added lines.</li>
+                <li className="text-xs text-slate-500">No issues in the added lines.</li>
               )}
           </ul>
         </div>
       ))}
 
-      <details className={`${CARD} p-5`}>
-        <summary className="cursor-pointer text-sm text-slate-300">
+      <details className={`${CARD} px-4 py-3`}>
+        <summary className="cursor-pointer text-sm text-slate-400">
           The comment the webhook would post
         </summary>
-        <pre className="mt-4 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg border border-slate-800 bg-[#0d1117] p-4 text-xs text-slate-400">
+        <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded border border-slate-800 bg-[#0d1117] p-3 text-xs text-slate-400">
           {data.comment_markdown}
         </pre>
       </details>
     </div>
   )
 }
-
-export { relativeTime }
