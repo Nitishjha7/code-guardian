@@ -36,8 +36,21 @@ export function load() {
   return read()
 }
 
+/**
+ * `crypto.randomUUID` only exists in a secure context — HTTPS, or localhost.
+ * Served over plain HTTP from any other origin (a LAN address, a deployment
+ * without TLS) it is undefined, and calling it threw before this fallback,
+ * taking the whole history feature down with it.
+ */
+function newId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 export function record(entry) {
-  const entries = [{ id: crypto.randomUUID(), at: Date.now(), ...entry }, ...read()]
+  const entries = [{ id: newId(), at: Date.now(), ...entry }, ...read()]
   write(entries)
   return entries.slice(0, LIMIT)
 }

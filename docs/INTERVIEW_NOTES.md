@@ -113,7 +113,7 @@ What is real:
 - The Docker stack runs; both entry points (UI and webhook) verified live
 - 107 unit tests, no API key required
 - Routing recall is **measured** on a held-out set, not assumed
-- Six bugs came out of real runs (§9 and the walkthrough)
+- Seven bugs came out of real runs and tests (§9 and the walkthrough)
 
 What is not:
 - The PR bot has never run against a real repository

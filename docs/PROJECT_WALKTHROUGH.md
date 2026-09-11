@@ -339,7 +339,7 @@ to measure on is a flaky test, which is worse than no test.
 
 ### 4.4 Bugs that only real runs found
 
-Five, and they are the most interesting thing in the project:
+Six, and they are the most interesting thing in the project:
 
 1. **Silent clean pass** — a 404 from a retired model reported as "0 findings" on
    vulnerable code.
@@ -352,9 +352,14 @@ Five, and they are the most interesting thing in the project:
    "relies on garbage collection" tripped the tone guard. A guard that cries wolf on
    correct technical writing is a guard people learn to ignore; the benign senses of
    *garbage*, *lazy*, *dumb* and *trash* are now excluded explicitly.
+6. **`crypto.randomUUID` outside a secure context** — found while screenshotting the UI
+   through a headless browser, which reached it over plain HTTP rather than localhost.
+   `crypto.randomUUID` is only defined in a secure context, so the call threw and took
+   the whole history feature down with it. It would have hit any deployment without
+   TLS, and any access over a LAN address. There is a fallback id now.
 
-A sixth was caught by a test rather than a run: `Critical = 40` against a 50-point band
-scored a lone Critical finding as *medium* risk.
+A seventh was caught by a test rather than a run: `Critical = 40` against a 50-point
+band scored a lone Critical finding as *medium* risk.
 
 ---
 

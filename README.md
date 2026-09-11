@@ -13,7 +13,12 @@
 </div>
 
 <p align="center">
-  <img src="docs/images/architecture.svg" alt="Code Guardian architecture: inputs feed a high-stakes backstop and an LLM supervisor that routes to security and performance auditors, then collect, patch, tests and guardrails" width="100%">
+  <img src="docs/images/dashboard.png" alt="Code Guardian reviewing a vulnerable Python file: risk 100/100 critical, both auditors routed, 5 security and 2 performance findings, a 131-line patch and 49 lines of generated tests" width="100%">
+</p>
+
+<p align="center">
+  <sub>A real run on the bundled vulnerable-Python sample. The strip under the editor is
+  every stage's actual outcome — route, each auditor, patch, tests, guardrails.</sub>
 </p>
 
 ---
@@ -36,6 +41,17 @@ review incomplete.
 | **Keeps failure distinct from silence** | `failed_audits` is a separate state. A failed audit yields risk band `unknown`, never `0/100 none`. |
 | **Measures its own routing** | 40 labelled cases across two sets, one of them held out. Exit code gates on recall. |
 | **Gates merges** | A Check Run on the PR: `failure` at high risk, `action_required` when the review was incomplete. |
+
+---
+
+<p align="center">
+  <img src="docs/images/architecture.svg" alt="Architecture: inputs feed a high-stakes backstop and an LLM supervisor that routes to security and performance auditors, then collect, patch, tests and guardrails" width="100%">
+</p>
+
+<p align="center">
+  <sub>Indigo is the one node the <b>model</b> controls. Everything else is a deterministic edge —
+  that distinction is the project's whole argument.</sub>
+</p>
 
 ---
 
@@ -160,8 +176,14 @@ docs/                           9 docs — start with PROJECT_WALKTHROUGH.md
 <details>
 <summary>What the dashboard shows — and what it deliberately doesn't</summary>
 
+<p align="center">
+  <img src="docs/images/agents.png" alt="The Agents page: six cards describing the supervisor, both auditors, the patch and test generators and the guardrails, each with its design criteria, above the compiled graph read live from /api/graph" width="100%">
+</p>
+
 Built to look like a tool, not a landing page: no hero, no tagline, no gradients.
-Five nav items, all of which do something.
+Five nav items, all of which do something. The Agents page above reads its graph
+from `/api/graph`, so it shows the topology the backend is running rather than a
+drawing of it.
 
 - **Run strip, risk donut, agent cards, patch, tests, agent log** — straight from the
   review.
@@ -181,8 +203,8 @@ Five nav items, all of which do something.
 ## Docs
 
 **Start here → [Project Walkthrough](docs/PROJECT_WALKTHROUGH.md)** — the whole system
-in one file: flowchart, how each piece was built and why, and the six bugs only real
-runs found.
+in one file: flowchart, how each piece was built and why, and the seven bugs only real
+runs and tests found.
 
 | Doc | For |
 |---|---|
