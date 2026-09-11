@@ -67,6 +67,11 @@ class ReviewerState(TypedDict, total=False):
     # Marked incomplete rather than low when an audit failed.
     risk: dict[str, Any]
 
+    # Regression tests written for Critical/High security findings.
+    # Generated only - never executed; see app/agents/test_generator.py.
+    generated_tests: str
+    tests_note: str
+
     # Audits that were invoked but never produced a result (bad key, dead model,
     # rate limit). Kept separate from "found nothing" so a failed audit can never
     # be rendered as a clean pass.

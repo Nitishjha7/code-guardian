@@ -107,6 +107,8 @@ class ReviewResponse(BaseModel):
     fixed_code: str
     diff: str
     summary_report: str
+    generated_tests: str = ""
+    tests_note: str = ""
     guardrail_report: dict[str, Any]
     logs: list[str]
 
@@ -176,6 +178,8 @@ async def review(request: ReviewRequest) -> ReviewResponse:
         fixed_code=state.get("fixed_code", ""),
         diff=state.get("diff", ""),
         summary_report=state.get("summary_report", ""),
+        generated_tests=state.get("generated_tests", ""),
+        tests_note=state.get("tests_note", ""),
         guardrail_report=state.get("guardrail_report", {}),
         logs=state.get("logs", []),
     )
