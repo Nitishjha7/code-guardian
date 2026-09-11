@@ -76,6 +76,7 @@ class PostResult:
     posted: bool
     reason: str = ""
     comment_url: str = ""
+    check_run_url: str = ""
     reviewed_files: list[str] = field(default_factory=list)
 
 
@@ -227,6 +228,32 @@ class GitHubClient:
 
         candidates.sort(key=lambda f: f.additions, reverse=True)
         return candidates[:limit]
+
+    def create_check_run(
+        self,
+        repo_full_name: str,
+        head_sha: str,
+        conclusion: str,
+        title: str,
+        summary: str,
+    ) -> str:
+        """Publish a Check Run against the PR's head commit.
+
+        This is what turns "posts a comment" into "can gate a merge": with the
+        check marked required in branch protection, a ``failure`` conclusion
+        blocks the merge button.
+
+        GitHub caps the output text at 65535 characters.
+        """
+        repo = self._client.get_repo(repo_full_name)
+        check = repo.create_check_run(
+            name="Code Guardian",
+            head_sha=head_sha,
+            status="completed",
+            conclusion=conclusion,
+            output={"title": title[:255], "summary": summary[:65000]},
+        )
+        return check.html_url
 
     def post_comment(self, repo_full_name: str, number: int, body: str) -> str:
         """Post the review as an issue comment on the PR; returns its URL."""

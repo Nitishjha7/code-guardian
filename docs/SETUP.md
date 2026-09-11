@@ -89,7 +89,7 @@ changes.
 ## Tests and eval
 
 ```bash
-# 99 unit tests — no API key needed
+# 107 unit tests — no API key needed
 cd backend && pytest -q
 
 # Routing eval — needs an API key (~40 LLM calls for both sets)

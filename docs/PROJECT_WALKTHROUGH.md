@@ -325,7 +325,7 @@ to measure on is a flaky test, which is worse than no test.
 
 | Check | Result |
 |---|---|
-| Unit tests | **99 pass**, no API key needed |
+| Unit tests | **107 pass**, no API key needed |
 | Routing eval, **held-out** set (20 cases, never tuned) | **as-shipped security recall 100%** (0 false negatives); router-only 89%; performance 43% |
 | Routing eval, dev set (20 cases, tuned against) | as-shipped 100%; router-only 90%; performance 50% |
 | Static fusion, vulnerable Python | 8 raw findings → **5** after dedup; **3 confirmed by both engines**; Bandit added 2 SQLi sites the LLM missed |
@@ -378,7 +378,7 @@ See [ROADMAP](ROADMAP.md).
 ```bash
 docker compose up --build                    # UI :3000, API :8010
 
-cd backend && pytest -q                      # 99 tests, no key needed
+cd backend && pytest -q                      # 107 tests, no key needed
 cd backend && python -m evals.run_routing_eval   # needs a key, ~20 calls
 
 curl https://api.groq.com/openai/v1/models -H "Authorization: Bearer $GROQ_API_KEY"

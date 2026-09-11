@@ -127,7 +127,7 @@ failed and malformed audits), every guardrail pattern, and the whole Phase 2
 surface: HMAC verification, event filtering, file selection, PR-link parsing and
 added-line extraction.
 
-**99 tests, no API key needed.** Not covered: the agent prompts themselves, and
+**107 tests, no API key needed.** Not covered: the agent prompts themselves, and
 the PyGithub calls (they need a token and a live PR).
 
 Routing quality is measured separately by `backend/evals/` — two sets of 20, one

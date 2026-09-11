@@ -191,6 +191,74 @@ def render_comment(ref: PullRequestRef, results: list[tuple[ChangedFile, dict]])
     return _render_pr_comment(ref, results)
 
 
+# Bands at or above this block the merge. "high" means one Critical finding is
+# enough, which is the calibration risk.py was built around.
+BLOCKING_BANDS = frozenset({"high", "critical"})
+
+
+def check_run_verdict(results: list[tuple[ChangedFile, dict]]) -> tuple[str, str, str]:
+    """Decide the Check Run conclusion from the worst file's risk.
+
+    Returns ``(conclusion, title, summary)``.
+
+    ``action_required`` rather than ``success`` or ``failure`` when any audit did
+    not run. Passing would be dangerous - nothing actually examined that file -
+    and failing would be wrong, because nothing is known either way. "A human
+    should look" is the only honest verdict.
+    """
+    scored = [r.get("risk") or {} for _, r in results]
+    incomplete = [r for r in scored if not r.get("complete", True)]
+
+    if incomplete:
+        return (
+            "action_required",
+            "Review incomplete - a human should look",
+            "One or more audits did not run, so this PR was not fully checked. "
+            "The risk score is unavailable rather than low.",
+        )
+
+    worst = max(scored, key=lambda r: r.get("score", 0), default={})
+    score = worst.get("score", 0)
+    band = str(worst.get("band", "none"))
+    findings = sum(
+        len(r.get("security_issues") or []) + len(r.get("performance_issues") or [])
+        for _, r in results
+    )
+
+    summary = (
+        f"{findings} finding(s) across {len(results)} file(s). "
+        f"Highest-risk file scores {score}/100 ({band}). "
+        "The score is the worst file's, not an average - a PR is as risky as its "
+        "most dangerous change."
+    )
+
+    if band in BLOCKING_BANDS:
+        return "failure", f"Risk {score}/100 - {band}", summary
+    return "success", f"Risk {score}/100 - {band}", summary
+
+
+def publish_check_run(
+    ref: PullRequestRef, client: GitHubClient, results: list[tuple[ChangedFile, dict]]
+) -> str:
+    """Publish the verdict. Returns the check URL, or "" if it could not be sent."""
+    if not ref.head_sha:
+        # Manual runs (a pasted PR link) carry no head SHA; only the webhook does.
+        return ""
+
+    conclusion, title, summary = check_run_verdict(results)
+    try:
+        url = client.create_check_run(
+            ref.repo_full_name, ref.head_sha, conclusion, title, summary
+        )
+    except Exception as exc:  # noqa: BLE001
+        # A missing checks:write permission must not lose the review comment.
+        logger.warning("Could not publish Check Run: %s", exc)
+        return ""
+
+    logger.info("Check Run %s for %s#%s", conclusion, ref.repo_full_name, ref.number)
+    return url
+
+
 def review_pull_request(ref: PullRequestRef) -> PostResult:
     """Review a PR and post the result. Runs in a background task."""
     settings = get_settings()
@@ -216,9 +284,14 @@ def review_pull_request(ref: PullRequestRef) -> PostResult:
         logger.exception("Could not post PR comment")
         return PostResult(posted=False, reason=f"could not post comment: {exc}")
 
+    # Published after the comment, so a checks:write failure cannot cost the
+    # review itself.
+    check_url = publish_check_run(ref, client, results)
+
     logger.info("PR %s#%s reviewed: %s", ref.repo_full_name, ref.number, url)
     return PostResult(
         posted=True,
         comment_url=url,
+        check_run_url=check_url,
         reviewed_files=[f.filename for f, _ in results],
     )

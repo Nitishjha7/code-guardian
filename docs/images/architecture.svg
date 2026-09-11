@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 430" width="980" height="430" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#64748b"/>
+    </marker>
+    <marker id="am" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#818cf8"/>
+    </marker>
+    <style>
+      .b  { fill:#0f172a; stroke:#334155; rx:8 }
+      .bi { fill:#1e1b4b; stroke:#4f46e5; rx:8 }
+      .bg { fill:#052e2b; stroke:#0d9488; rx:8 }
+      .bw { fill:#1c1917; stroke:#57534e; rx:8 }
+      .t  { fill:#e2e8f0; font-size:13px; font-weight:600 }
+      .s  { fill:#94a3b8; font-size:10.5px }
+      .l  { fill:#64748b; font-size:10px; font-style:italic }
+      .e  { stroke:#64748b; stroke-width:1.4; fill:none; marker-end:url(#a) }
+      .em { stroke:#818cf8; stroke-width:1.6; fill:none; marker-end:url(#am) }
+      .ed { stroke:#475569; stroke-width:1.3; fill:none; stroke-dasharray:4 3; marker-end:url(#a) }
+    </style>
+  </defs>
+
+  <rect width="980" height="430" fill="#020617"/>
+
+  <!-- inputs -->
+  <rect class="b" x="16" y="70" width="126" height="40"/>
+  <text class="t" x="79" y="88" text-anchor="middle">Paste / upload</text>
+  <text class="s" x="79" y="102" text-anchor="middle">/api/review</text>
+
+  <rect class="b" x="16" y="128" width="126" height="40"/>
+  <text class="t" x="79" y="146" text-anchor="middle">Pull request</text>
+  <text class="s" x="79" y="160" text-anchor="middle">/webhook/github</text>
+
+  <path class="e" d="M142 90 H176 V112 H198"/>
+  <path class="e" d="M142 148 H176 V126 H198"/>
+
+  <!-- backstop -->
+  <rect class="bw" x="200" y="92" width="128" height="54"/>
+  <text class="t" x="264" y="112" text-anchor="middle">high-stakes?</text>
+  <text class="s" x="264" y="127" text-anchor="middle">auth / DB / exec</text>
+  <text class="s" x="264" y="139" text-anchor="middle">static backstop</text>
+
+  <path class="e" d="M264 146 V186 H330"/>
+  <text class="l" x="272" y="168">yes → force both</text>
+
+  <path class="em" d="M328 108 H392"/>
+  <text class="l" x="336" y="100">no</text>
+
+  <!-- supervisor -->
+  <rect class="bi" x="394" y="80" width="150" height="58"/>
+  <text class="t" x="469" y="101" text-anchor="middle">Supervisor (LLM)</text>
+  <text class="s" x="469" y="116" text-anchor="middle">bind_tools · temp 0</text>
+  <text class="s" x="469" y="129" text-anchor="middle">docstrings = criteria</text>
+
+  <path class="em" d="M469 138 V172 H400 V190"/>
+  <path class="em" d="M469 138 V172 H560 V190"/>
+  <path class="ed" d="M544 100 H600 V60 H300 V80" />
+  <text class="l" x="404" y="52">loop while tool_calls present</text>
+
+  <!-- auditors -->
+  <rect class="b" x="330" y="192" width="146" height="58"/>
+  <text class="t" x="403" y="212" text-anchor="middle">security_audit</text>
+  <text class="s" x="403" y="227" text-anchor="middle">LLM + Bandit, fused</text>
+  <text class="s" x="403" y="240" text-anchor="middle">merged by line</text>
+
+  <rect class="b" x="490" y="192" width="146" height="58"/>
+  <text class="t" x="563" y="212" text-anchor="middle">performance_audit</text>
+  <text class="s" x="563" y="227" text-anchor="middle">Big-O · N+1</text>
+  <text class="s" x="563" y="240" text-anchor="middle">leaks · resources</text>
+
+  <path class="e" d="M403 250 V284 H470"/>
+  <path class="e" d="M563 250 V284 H498"/>
+
+  <!-- collect -->
+  <rect class="b" x="404" y="286" width="146" height="54"/>
+  <text class="t" x="477" y="306" text-anchor="middle">collect + score</text>
+  <text class="s" x="477" y="321" text-anchor="middle">ok/error envelope</text>
+  <text class="s" x="477" y="333" text-anchor="middle">risk 0–100</text>
+
+  <path class="e" d="M550 312 H614"/>
+
+  <!-- patch -->
+  <rect class="b" x="616" y="286" width="136" height="54"/>
+  <text class="t" x="684" y="306" text-anchor="middle">patch</text>
+  <text class="s" x="684" y="321" text-anchor="middle">model rewrites file</text>
+  <text class="s" x="684" y="333" text-anchor="middle">difflib makes diff</text>
+
+  <path class="e" d="M684 286 V248 H744"/>
+  <text class="l" x="690" y="240">Critical/High only</text>
+
+  <rect class="b" x="746" y="192" width="140" height="54"/>
+  <text class="t" x="816" y="212" text-anchor="middle">tests</text>
+  <text class="s" x="816" y="227" text-anchor="middle">regression per finding</text>
+  <text class="s" x="816" y="239" text-anchor="middle">generated, not run</text>
+
+  <path class="e" d="M816 246 V300 H812"/>
+  <path class="e" d="M752 312 H808"/>
+
+  <!-- guardrail -->
+  <rect class="bg" x="812" y="286" width="150" height="54"/>
+  <text class="t" x="887" y="306" text-anchor="middle">guardrails</text>
+  <text class="s" x="887" y="321" text-anchor="middle">11 secret patterns</text>
+  <text class="s" x="887" y="333" text-anchor="middle">redact, never drop</text>
+
+  <path class="e" d="M887 340 V372"/>
+
+  <rect class="b" x="746" y="374" width="216" height="40"/>
+  <text class="t" x="854" y="392" text-anchor="middle">report · patch · tests · risk</text>
+  <text class="s" x="854" y="406" text-anchor="middle">+ Check Run verdict on PRs</text>
+
+  <!-- legend -->
+  <rect class="bi" x="20" y="380" width="12" height="12"/>
+  <text class="s" x="40" y="390">model decides control flow</text>
+  <rect class="b" x="216" y="380" width="12" height="12"/>
+  <text class="s" x="236" y="390">deterministic graph edges</text>
+</svg>

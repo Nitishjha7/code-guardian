@@ -527,7 +527,7 @@ run that did not happen is not a clean result.
 
 ---
 
-## backend/tests/ — 99 tests, no API key
+## backend/tests/ — 107 tests, no API key
 
 All on deterministic seams:
 

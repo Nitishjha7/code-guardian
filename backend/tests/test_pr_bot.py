@@ -14,12 +14,13 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.mcp_clients.github_client import (
+    ChangedFile,
     added_lines,
     language_for_path,
     parse_pull_request_event,
     parse_pull_request_url,
 )
-from app.pr_bot import verify_signature
+from app.pr_bot import check_run_verdict, publish_check_run, verify_signature
 
 SECRET = "s3cr3t-webhook-token"
 
@@ -138,6 +139,70 @@ def test_things_that_are_not_pr_links_are_rejected():
         "just some words",
     ]:
         assert parse_pull_request_url(text) is None, text
+
+
+# --------------------------------------------------------------------------- #
+# Check Run verdict (roadmap 2e)
+# --------------------------------------------------------------------------- #
+
+def _file(score, band, complete=True, security=0):
+    changed = ChangedFile(filename="a.py", language="python", patch="")
+    state = {
+        "risk": {"score": score, "band": band, "complete": complete},
+        "security_issues": [{"title": "x"}] * security,
+        "performance_issues": [],
+    }
+    return (changed, state)
+
+
+def test_a_critical_risk_blocks_the_merge():
+    conclusion, title, _ = check_run_verdict([_file(100, "critical", security=2)])
+    assert conclusion == "failure"
+    assert "100/100" in title
+
+
+def test_one_critical_finding_is_enough_to_block():
+    """risk.py is calibrated so a lone Critical reaches the high band."""
+    assert check_run_verdict([_file(50, "high", security=1)])[0] == "failure"
+
+
+def test_a_clean_pr_passes():
+    assert check_run_verdict([_file(0, "none")])[0] == "success"
+
+
+def test_a_low_risk_pr_passes():
+    assert check_run_verdict([_file(10, "low", security=1)])[0] == "success"
+
+
+def test_an_incomplete_review_asks_for_a_human_rather_than_passing():
+    """Neither success nor failure is honest when nothing actually looked."""
+    conclusion, title, summary = check_run_verdict(
+        [_file(0, "unknown", complete=False)]
+    )
+    assert conclusion == "action_required"
+    assert "incomplete" in title.lower()
+    assert "not fully checked" in summary
+
+
+def test_one_incomplete_file_makes_the_whole_verdict_incomplete():
+    verdict = check_run_verdict(
+        [_file(0, "none"), _file(0, "unknown", complete=False)]
+    )
+    assert verdict[0] == "action_required"
+
+
+def test_the_verdict_follows_the_worst_file_not_the_average():
+    conclusion, title, _ = check_run_verdict(
+        [_file(0, "none"), _file(0, "none"), _file(100, "critical", security=1)]
+    )
+    assert conclusion == "failure"
+    assert "100/100" in title
+
+
+def test_a_manual_run_publishes_no_check(monkeypatch):
+    """Only the webhook carries a head SHA; a pasted link has nothing to attach to."""
+    ref = parse_pull_request_url("acme/widgets#7")
+    assert publish_check_run(ref, object(), [_file(100, "critical")]) == ""
 
 
 def test_known_source_extensions_map_to_a_language():

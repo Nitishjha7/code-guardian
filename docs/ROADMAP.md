@@ -15,11 +15,11 @@ summarises it; [TECHNICAL_SPEC §7](TECHNICAL_SPEC.md) details the deferred item
 | 2b | Static analysis (Bandit) fused into `security_audit` | ✅ done |
 | 2c | Risk score on every review | ✅ done |
 | 2d | Test Generation Agent | ✅ done |
-| 2e | GitHub Check Run status (gate merges on the risk score) | ⬜ next |
+| 2e | GitHub Check Run status (gates merges on the risk score) | ✅ done |
 | 3–5 | Advanced Intelligence, Learning & Memory, full CI/CD | ⬜ deliberately deferred |
 
 **Built although it was not in the plan:** a routing eval with a **held-out set**
-(`backend/evals/`, 40 cases), 99 unit tests, and the full docs set.
+(`backend/evals/`, 40 cases), 107 unit tests, and the full docs set.
 
 ---
 
@@ -29,7 +29,7 @@ Everything here was actually run, not claimed.
 
 | Check | Result |
 |---|---|
-| Unit tests | **99 pass**, no API key needed |
+| Unit tests | **107 pass**, no API key needed |
 | Routing eval, **held-out** (20 cases, never tuned against) | as-shipped security recall **100%**, 0 false negatives; router-only 89%; performance 43% |
 | Routing eval, dev (20 cases, tuned against) | as-shipped 100%; router-only 90%; performance 50% |
 | Static fusion (vulnerable Python) | 8 raw findings → **5** after dedup; **3 confirmed by both engines**; Bandit found 2 SQLi sites the LLM missed |
@@ -60,28 +60,14 @@ repo has no PRs yet.
 Everything up to the GitHub API call is tested — HMAC, event filtering, file
 selection, added-line extraction. **The PyGithub calls themselves are not.**
 
-Steps are in the [README](../README.md#github-pr-bot-phase-2). After adding the
-webhook, GitHub sends a `ping` immediately; Recent Deliveries should show
+Steps are in the [README](../README.md#github-pr-bot). After adding the webhook,
+GitHub sends a `ping` immediately; Recent Deliveries should show
 `202 {"status":"pong"}`, which is the fastest confirmation that both sides hold
 the same secret.
 
-### 2e — GitHub Check Run ⬜ next
-
-`pr_bot.py` already has an authenticated PyGithub client, and the risk score is
-already computed. One more API call:
-
-```
-conclusion = "failure"          if risk.band in ("high", "critical")
-             "action_required"  if not risk.complete
-             "success"          otherwise
-```
-
-**`action_required` matters:** on an incomplete review `success` is dangerous
-(nothing actually looked) and `failure` is wrong (nothing is known). "A human
-should look" is the correct answer.
-
-This turns "posts a comment" into "can gate a merge" without touching the review
-graph.
+The Check Run (2e) is also unverified for the same reason — the code decides the
+verdict and 8 tests cover that logic, but the `create_check_run` call itself has
+never reached GitHub. The token additionally needs **checks:write**.
 
 ---
 
@@ -151,15 +137,14 @@ Knowing these yourself is the most important thing for an interview.
 
 | # | Task | Effort | Why |
 |---|---|---|---|
-| 1 | **2a** — run against a real PR | 30 min | makes the "real automation" claim true |
-| 2 | **2e** — Check Run gate | 1–2 hrs | comment → merge gate; the score already exists |
-| 3 | Re-run the eval on 120b | 20 min | current numbers are from 20b |
-| 4 | **Semgrep** for multi-language scanning | 2–3 hrs | removes the Bandit-only limitation |
-| 5 | Findings-quality eval (labelled vulnerabilities) | 1 day | only routing is measured today, not findings |
-| 6 | Cost/token tracking | 3 hrs | there is currently no cost number worth quoting |
+| 1 | **2a** — run against a real PR (and see the Check Run land) | 30 min | makes the "real automation" claim true |
+| 2 | Re-run the eval on 120b | 20 min | current numbers are from 20b |
+| 3 | **Semgrep** for multi-language scanning | 2–3 hrs | removes the Bandit-only limitation |
+| 4 | Findings-quality eval (labelled vulnerabilities) | 1 day | only routing is measured today, not findings |
+| 5 | Cost/token tracking | 3 hrs | there is currently no cost number worth quoting |
 
-**1 and 2 are worth doing before an interview.** 3 closes the last caveat on the
-headline number.
+**1 is worth doing before an interview** — it is the only "not verified" caveat
+left. 2 closes the last caveat on the headline number.
 
 ---
 
