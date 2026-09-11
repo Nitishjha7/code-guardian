@@ -4,7 +4,7 @@
 
 **Multi-agent code reviewer where an LLM decides which specialists a diff actually needs.**
 
-[![tests](https://img.shields.io/badge/tests-107%20passing-3fb950)](backend/tests)
+[![tests](https://github.com/Nitishjha7/code-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/Nitishjha7/code-guardian/actions/workflows/ci.yml)
 [![security recall](https://img.shields.io/badge/security%20recall-100%25%20held--out-3fb950)](#does-the-router-actually-work)
 [![LangGraph](https://img.shields.io/badge/LangGraph-StateGraph-4f46e5)](backend/app/graph.py)
 [![Groq](https://img.shields.io/badge/Groq-gpt--oss--120b-f97316)](backend/app/config.py)
@@ -167,6 +167,8 @@ backend/app/guardrails_config/  Secrets + tone validators
 backend/app/mcp_clients/        GitHub client (PyGithub)
 backend/tests/                  107 tests for the LLM-free seams
 backend/evals/                  40 labelled cases: 20 dev + 20 held-out
+Dockerfile · render.yaml        Single-service deploy image + Render blueprint
+.github/workflows/ci.yml        Tests, frontend build, and a deploy-image smoke test
 frontend/src/                   React dashboard
 docs/                           9 docs — start with PROJECT_WALKTHROUGH.md
 ```
@@ -222,6 +224,14 @@ runs and tests found.
 
 Phases 1 and 2 are implemented, along with static-analysis fusion, risk scoring, test
 generation, the Check Run gate, and a held-out routing eval.
+
+**Deploy-ready, not deployed.** `Dockerfile` and `render.yaml` at the repo root build a
+single service that serves the API and the built SPA from one origin — no CORS to
+configure, one thing to keep awake. Verified locally: a real review runs through the
+image in 1.5s on the CSS sample (router calls no auditor), at **73 MB** against Render
+free's 512 MB. There is no database because a review holds no state between requests.
+What is left is creating the service and setting `GROQ_API_KEY` — see
+[BUILD_AND_DEPLOY](docs/BUILD_AND_DEPLOY.md).
 
 Deliberately deferred: repo-wide RAG, vector-DB team memory, and a sandboxed
 self-healing patch loop. Each is its own multi-week project rather than a node this

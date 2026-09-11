@@ -72,6 +72,21 @@ heavy testing the day before a demo will exhaust it. Switching to
 7. ✅ GitHub PR bot — `/webhook/github` with HMAC auth, `pr_bot.py`
 8. ✅ Bandit fusion, risk score, test generation, held-out routing eval
 
+## How this was built
+
+The code was written with heavy use of an AI coding assistant (Claude), working
+through the order above, with each stage run against the real Groq API before
+moving on.
+
+What that did **not** decide: that the supervisor should route instead of fanning
+out and that the routing claim had to be measured rather than asserted, that a
+second eval set had to be held out and never tuned against, that a failed audit
+reporting "no issues found" was the worst possible bug for an auditing tool, that
+the diff should be computed with `difflib` rather than requested from a model, and
+that "MCP" must not be claimed for a folder that runs PyGithub.
+
+Those judgements are the project, and the notes below are where they are defended.
+
 ## Implementation notes worth knowing before the interview
 
 Six places where the code deliberately departs from the naive reading of the
@@ -139,43 +154,50 @@ Details and caveats in the [README](../README.md).
 
 ## Deployment
 
-### Where
+### What is left
 
-| Part | Platform | Why |
-|---|---|---|
-| Backend (FastAPI + Docker) | **Render** or **Railway** | deploys the Dockerfile directly, free tier |
-| Frontend (React) | **Cloudflare Pages** or **Vercel** | static build, free tier, global CDN |
+The image is built and verified locally. These steps have to be done by hand:
+
+- [ ] Render → **New → Blueprint**, point it at this repo (it reads `render.yaml`)
+- [ ] Set `GROQ_API_KEY` in the dashboard
+- [ ] Open the URL and run the bundled CSS sample — it should route to **no auditor**
+- [ ] Update `GUARDIAN_CORS_ORIGINS` to the real service URL
+- [ ] Optional, for the PR bot: `GITHUB_TOKEN` + `GITHUB_WEBHOOK_SECRET`, then point a
+      repo webhook at `/webhook/github`
+- [ ] Put the live URL in the README
+
+### One service, not two
+
+`Dockerfile` at the repo root builds the React app and hands the bundle to FastAPI,
+which serves it from the same origin as the API. `render.yaml` deploys exactly that.
+
+This replaced an earlier split plan (backend on Render, frontend on Cloudflare Pages).
+A split needs CORS configured, a second deploy to keep in sync, and a second service to
+keep awake — and `VITE_API_URL` baked at build time is precisely the thing that drifts
+when the backend URL changes. Same-origin removes all three problems, and `api.js`
+already defaults to a relative `/api`, so no frontend code changed.
+
+The SPA keeps its page in the URL **hash**, so `StaticFiles(html=True)` is all the
+fallback needed — there is no path-based route for the server to 404 on.
+
+**Measured before choosing the free plan:** 73 MB resident after a real review, image
+334 MB, against Render free's 512 MB limit. Worth stating because the sibling
+Adaptive CRAG project had to leave Render for exactly this reason — it peaks at 698 MB
+once the cross-encoder loads. Code Guardian has no embedding model and no reranker, so
+it fits with room to spare.
+
+There is no database in the blueprint: a review is one graph invocation holding no
+state between requests, and the PR bot writes its results back to GitHub rather than
+to a store of its own.
+
+### Alternatives
 
 **Cloudflare Workers will not work for the backend** — Python/FastAPI and a
-long-running webhook process do not fit that runtime. Use Cloudflare for the
-frontend only.
+long-running webhook process do not fit that runtime.
 
 Hugging Face Spaces is a viable single-container alternative (Docker SDK, free,
 secrets in Settings), with two caveats: free Spaces sleep after inactivity, and a
 public Space exposes `/api/review` to anyone, which spends your Groq quota.
-
-### Backend (Render)
-
-1. Push the repo to GitHub.
-2. Create a new **Web Service** and connect the repo.
-3. Root directory: `backend/`
-4. Build: `pip install -r requirements.txt`
-5. Start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-6. Environment variables: `GROQ_API_KEY`, `GUARDIAN_MODEL`, and for the PR bot
-   `GITHUB_TOKEN` + `GITHUB_WEBHOOK_SECRET`.
-7. Deploy.
-
-### Frontend (Cloudflare Pages)
-
-1. Pages → **Create a project** → connect the repo.
-2. Root directory: `frontend/`
-3. Build: `npm run build`
-4. Output directory: `dist`
-5. Environment variable: `VITE_API_URL=https://your-backend.onrender.com/api`
-6. Deploy.
-
-Remember to add the deployed frontend origin to `GUARDIAN_CORS_ORIGINS` on the
-backend.
 
 ### GitHub webhook
 

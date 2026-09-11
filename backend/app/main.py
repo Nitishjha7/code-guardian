@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 from typing import Any, Literal
 
 import anyio
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from . import __version__, pr_bot
@@ -346,3 +348,20 @@ def graph_topology() -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"mermaid": mermaid}
+
+
+# Mounted last, and deliberately so: a mount at "/" swallows every path beneath
+# it, so every API route above has to be registered first or it becomes
+# unreachable.
+#
+# Only the single-service deploy image has this directory. Under docker-compose
+# nginx serves the frontend and this block is a no-op, which is why the check is
+# on the directory rather than on an env var — one fewer thing to set correctly.
+#
+# The SPA keeps its page in the URL *hash* (`lib/router.js`), so every route is
+# the same document and `html=True` is all the fallback this needs. A path-based
+# router would need a catch-all returning index.html.
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+if STATIC_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+    logger.info("Serving the built frontend from %s", STATIC_DIR)

@@ -1,0 +1,47 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# Deploys the single-service image (FastAPI serving both the API and the built
+# React app), so the whole demo lives on one URL with no CORS to configure and
+# only one service to keep awake.
+#
+# There is no database here: Code Guardian holds no state between requests. A
+# review is one graph invocation, and the PR bot writes its results back to
+# GitHub rather than to a store of its own.
+#
+# Measured before choosing the free plan: the backend image is 317 MB and peaks
+# well inside the 512 MB limit — no embedding model and no reranker, unlike the
+# Adaptive CRAG project, which had to be moved off Render for exactly that reason.
+
+services:
+  - type: web
+    name: code-guardian
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: singapore
+    healthCheckPath: /api/health
+    envVars:
+      # Set these in the Render dashboard — never commit real values.
+      - key: GROQ_API_KEY
+        sync: false
+
+      # Groq retires model ids; check with
+      #   curl https://api.groq.com/openai/v1/models -H "Authorization: Bearer $GROQ_API_KEY"
+      # before a demo. Must support tool calling — the supervisor depends on it.
+      - key: GUARDIAN_MODEL
+        value: openai/gpt-oss-120b
+
+      # Single-service deploy is same-origin, so no cross-origin caller is
+      # expected. Kept narrow rather than "*" because this service will hold a
+      # GitHub token.
+      - key: GUARDIAN_CORS_ORIGINS
+        value: https://code-guardian.onrender.com
+
+      # Optional — only needed for the PR bot (Phase 2). Without them the review
+      # UI works and /webhook/github fails closed with 503, which is the
+      # intended behaviour, not a misconfiguration.
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_WEBHOOK_SECRET
+        sync: false

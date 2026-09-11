@@ -1,0 +1,90 @@
+name: tests
+
+# The suite is deliberately LLM-free — it covers the deterministic seams (JSON
+# recovery, diff generation, the routing predicate, the state collector, the
+# guardrails, and the whole webhook surface). So CI needs no GROQ_API_KEY and no
+# GitHub token, and a fork's pull request runs it in full.
+#
+# What this does NOT cover: the agent prompts and the PyGithub calls. Routing
+# quality is measured separately by `backend/evals/`, which does need a key and
+# therefore cannot run here.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  backend:
+    name: backend · 107 tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt pytest==8.3.4 httpx==0.28.1
+
+      - name: Run tests
+        working-directory: backend
+        run: pytest -q
+
+  frontend:
+    name: frontend · production build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # A build failure here is a real failure: the deploy image builds the same
+      # bundle, so a broken frontend would only surface at deploy time otherwise.
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+  deploy-image:
+    name: deploy image · builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Builds the single-service image the Render blueprint deploys. Not pushed
+      # anywhere — the point is to fail here rather than on Render, where the
+      # feedback loop is minutes long and the failure is public.
+      - name: Build the single-service image
+        run: docker build -f Dockerfile -t code-guardian:ci .
+
+      - name: Boot it and check /api/health
+        run: |
+          docker run -d --name ci -p 8000:8000 -e GROQ_API_KEY=dummy-key-for-boot code-guardian:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/api/health >/dev/null 2>&1; then
+              echo "healthy after ${i}s"
+              curl -s http://localhost:8000/api/health
+              # The SPA has to be served from the same origin, or the whole
+              # reason for the single-service image is gone.
+              test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/)" = "200"
+              echo "SPA served from the same origin"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "never became healthy:"
+          docker logs ci
+          exit 1
