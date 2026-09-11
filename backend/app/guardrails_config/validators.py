@@ -77,8 +77,23 @@ _PLACEHOLDER = re.compile(
     r"os\.environ.*|os\.getenv.*|process\.env\..*|env\[.*\])$"
 )
 
+# Several English insults are also ordinary computing vocabulary. A tone guard
+# that flags "garbage collection", "lazy evaluation" or "a dumb terminal" cries
+# wolf on correct technical writing, and a guard people learn to ignore protects
+# nothing - so the benign senses are excluded explicitly.
 _TONE_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("insulting language about the author", re.compile(r"(?i)\b(stupid|idiot|moron|dumb|garbage|trash|awful|pathetic|incompetent|lazy)\b")),
+    (
+        "insulting language about the author",
+        re.compile(
+            r"(?i)\b(?:"
+            r"garbage(?!\s+collect)|"          # garbage collection / collector
+            r"lazy(?!\s+(?:load|eval|init))|"  # lazy loading / evaluation / init
+            r"dumb(?!\s+(?:terminal|pipe))|"
+            r"trash(?!\s+(?:the\s+)?cache)|"
+            r"stupid|idiot|moron|awful|pathetic|incompetent"
+            r")\b"
+        ),
+    ),
     ("profanity", re.compile(r"(?i)\b(damn|crap|wtf|shit|fuck\w*)\b")),
     ("personal attack", re.compile(r"(?i)\byou (?:clearly |obviously )?(?:don'?t|do not|can'?t|cannot) (?:know|understand|code|program)\b")),
 ]

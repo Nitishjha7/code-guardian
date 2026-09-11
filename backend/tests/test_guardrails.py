@@ -60,6 +60,27 @@ def test_tone_flags_are_reported_but_text_is_not_rewritten():
     assert report["passed"] is False
 
 
+def test_technical_vocabulary_is_not_mistaken_for_an_insult():
+    """Found in a real run: a finding explaining that a cursor was "relying on
+    garbage collection" tripped the insult pattern. A guard that cries wolf on
+    correct technical writing is a guard people learn to ignore."""
+    benign = [
+        "The cursor is never closed, relying on garbage collection.",
+        "Use lazy loading here to avoid the upfront cost.",
+        "This is a dumb terminal, so escape codes do nothing.",
+        "Lazy evaluation would avoid materialising the list.",
+    ]
+    for text in benign:
+        _, report = validate_output(text)
+        assert report["tone_flags"] == [], text
+
+
+def test_actual_insults_are_still_flagged():
+    for text in ["This code is garbage.", "Whoever wrote this is lazy.", "Stupid design."]:
+        _, report = validate_output(text)
+        assert report["tone_flags"], text
+
+
 def test_report_names_the_engine():
     _, report = validate_output("hello")
     assert "local-pattern-scanner" in report["engine"]
