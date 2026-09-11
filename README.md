@@ -8,26 +8,27 @@ Code Guardian is a multi-agent code auditing platform. It coordinates specialize
 >
 > | Piece | State |
 > |---|---|
-> | Docs (README, spec, setup, build & deploy guide) | ✅ complete |
+> | Docs — 9 files: walkthrough, spec, code notes, code Q&A, interview notes, fundamentals, roadmap, setup, build & deploy | ✅ complete |
 > | LangGraph graph, tool-calling supervisor, 3 agents, guardrails | ✅ implemented |
 > | FastAPI `/api/review`, `/api/health`, `/api/graph` | ✅ implemented |
 > | React + Monaco review dashboard | ✅ implemented |
 > | Docker images + Compose stack | ✅ builds and runs |
 > | Phase 2: GitHub PR bot — `/webhook/github`, HMAC auth, PyGithub client | ✅ implemented |
-> | Phases 3–5 (extra agents, memory, CI/CD gating) | ❌ roadmap only, by design |
+> | 2b static analysis · 2c risk score · 2d test generation | ✅ implemented |
+> | 2a live PR verification · 2e Check Run gate · Phases 3–5 | ❌ see [ROADMAP](docs/ROADMAP.md) |
 >
 > **Verified end-to-end against a live Groq key:**
 >
 > | Check | Result |
 > |---|---|
-> | 87 backend unit tests | pass |
+> | 97 backend unit tests | pass |
 > | Routing eval, 20 labelled cases | security recall **100%** (0 false negatives); performance recall 50% |
 > | Static analysis fusion (vulnerable Python) | 8 raw findings → **5** after dedup; **3 confirmed by both engines**; Bandit added 2 SQLi sites the LLM missed |
 > | Risk score across the three samples | vulnerable Python **100/100 critical**, slow JS **10/100 low**, plain CSS **0/100 none** |
 > | Risk score on a failed audit | band `unknown`, "score unavailable" — never a reassuring number |
 > | Frontend production build | pass |
 > | Compose stack (nginx → backend) | `/api/health` + `/api/review` both 200 |
-> | Vulnerable Python sample | 3 security + 4 performance findings, 80-line patch, 6.4s |
+> | Vulnerable Python sample | 5 security + 2 performance findings, 94-line patch, 88 lines of generated tests, ~11.4s |
 > | Plain CSS sample | router skipped both auditors, 0.9s |
 > | Slow JS sample | router chose performance only, flagged O(u×e) → O(u+e) |
 > | Failed audit (dead model id) | reported as **"Audit failed — this code was not checked"**, never as clean |
@@ -62,10 +63,11 @@ backend/app/guardrails_config/ # Secrets + tone validators on all outbound text
 backend/app/pr_bot.py          # Phase 2: HMAC verification + PR review orchestration
 backend/app/mcp_clients/       # GitHub client (PyGithub): PR diffs, comments
 backend/app/risk.py            # Weighted risk score (findings + size, corroboration-aware)
-backend/tests/                 # 87 unit tests for the LLM-free seams
+backend/app/agents/test_generator.py    # Regression tests (generated, never executed)
+backend/tests/                 # 97 unit tests for the LLM-free seams
 backend/evals/                 # 20 labelled snippets measuring routing recall
 frontend/src/                  # React + Monaco review dashboard
-docs/                          # Setup, technical spec, build & deploy
+docs/                          # 9 docs — start with PROJECT_WALKTHROUGH.md
 ```
 
 ## Quick start
@@ -123,7 +125,7 @@ decision visible:
 
 | Sample | Observed behaviour |
 |---|---|
-| Vulnerable Python (SQLi + N+1) | Both auditors run (the high-stakes backstop forces them). 5 security findings — 3 of them marked **`confirmed`** because Bandit flagged the same line independently, and 2 SQLi sites only Bandit caught. N+1 queries `O(n)` → `O(1)`, missing index, unclosed connection. **~7.4s** |
+| Vulnerable Python (SQLi + N+1) | Both auditors run (the high-stakes backstop forces them). 5 security findings — 3 marked **`confirmed`** because Bandit flagged the same line independently, and 2 SQLi sites only Bandit caught. Risk **100/100 critical**, 94-line patch, 88 lines of generated regression tests. **~11.4s** |
 | Plain CSS | Router calls **no auditor at all** and the UI shows both sections as "not run". **~0.9s** — the cost difference *is* the demo |
 | Slow JavaScript | Router calls **performance only**; flags the quadratic join `O(u × e)` → `O(u + e)` |
 
@@ -248,9 +250,21 @@ curl -X POST http://localhost:8010/webhook/github \
 
 ## Docs
 
-- [Setup Guide](docs/SETUP.md) — git init, folder structure, and pushing to GitHub.
-- [Technical Specification](docs/TECHNICAL_SPEC.md) — architecture, multi-agent graph topology, agent responsibilities, roadmap, and future phases.
-- [Build & Deploy Guide](docs/BUILD_AND_DEPLOY.md) — what to prioritize for an interview showcase, build order, and deployment steps (Render/Railway + Cloudflare Pages).
+**Start here → [Project Walkthrough](docs/PROJECT_WALKTHROUGH.md)** — the whole project
+in one file: flowchart, how each piece was built and why, what was verified, and the
+five bugs only real runs found.
+
+| Doc | What it is for |
+|---|---|
+| [PROJECT_WALKTHROUGH](docs/PROJECT_WALKTHROUGH.md) | the whole system, end to end — read this one first |
+| [TECHNICAL_SPEC](docs/TECHNICAL_SPEC.md) | architecture, graph topology, §3a routing argument, deviations from spec |
+| [CODE_NOTES](docs/CODE_NOTES.md) | file-by-file "why this exists", not "what it does" |
+| [CODE_QA](docs/CODE_QA.md) | 35 questions to defend your own code, with answers |
+| [INTERVIEW_NOTES](docs/INTERVIEW_NOTES.md) | pitch, trade-offs, limitations, demo script, honesty checklist |
+| [AGENT_FUNDAMENTALS](docs/AGENT_FUNDAMENTALS.md) | general agent / tool-calling / eval concepts + question bank |
+| [ROADMAP](docs/ROADMAP.md) | what is done, what is left, what is deferred and why |
+| [SETUP](docs/SETUP.md) | prerequisites, env, local dev, troubleshooting table |
+| [BUILD_AND_DEPLOY](docs/BUILD_AND_DEPLOY.md) | build priorities and deployment (Render/Railway + Cloudflare Pages) |
 
 ## Roadmap
 

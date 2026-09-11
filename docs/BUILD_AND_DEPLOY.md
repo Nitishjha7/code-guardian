@@ -36,7 +36,7 @@ Ye sab already [TECHNICAL_SPEC.md](TECHNICAL_SPEC.md) ke "Future Phases" section
 - **"Router galat decide kare toh?"** — Ye khud se bolo, ye maturity dikhata hai: false negative (security audit skip ho gaya jabki vulnerability thi) wasted tokens se kahin bura hai. Teen mitigation: `temperature=0` + docstrings ko routing *criteria* ki tarah likhna, high-stakes paths (auth/DB touch karne wale diffs) pe forced-fan-out override flag, aur labelled snippets ka eval set jo **recall** measure kare. **Ye teeno actually bane hue hain** — eval `backend/evals/` me hai, aur measured number bhi hai: security recall **100%** (0 false negatives), performance recall 50%. Number bolna hi is answer ko strong banata hai; "hum measure karte hain" bolna kaafi nahi.
 - **"ReAct-style tool calling banaya hai?"** — Haan, yahi wo project hai. Aur ye bhi bolo ki *kyun* sirf yahan: SQL agent me control flow deterministic hona chahiye (DB error se decide hota hai, model se nahi), yahan model ka judgement hi routing signal hai. Dono pattern jaante ho, aur kab kaunsa use karna hai wo bhi — yahi asli answer hai.
 - Ek tricky design decision explain karne ke liye ready raho — jaise Guardrails kyun use kiya (secrets leak prevent karna), ya LangGraph state design kyun aisa rakha.
-- **Live demo ready rakho**: vulnerable code paste karo (e.g. SQL injection wala snippet) → dikhao Security Agent flag karta hai → Patch Generator fix suggest karta hai. Phir CSS sample chalao — router dono auditors skip kar deta hai, ~0.9s vs ~6.4s. Ye contrast hi §3a ka poora argument hai, bolne se zyada asar karta hai.
+- **Live demo ready rakho**: vulnerable code paste karo (e.g. SQL injection wala snippet) → dikhao Security Agent flag karta hai → Patch Generator fix suggest karta hai. Phir CSS sample chalao — router dono auditors skip kar deta hai, ~0.9s vs ~11.4s. Ye contrast hi §3a ka poora argument hai, bolne se zyada asar karta hai.
 - **"LLM hallucinate kare ya miss kar de toh?"** — ye sabse aam sawaal hai AI review tools pe, aur iska jawab architecture me hai: `security_audit` ke andar **Bandit bhi chalta hai** aur dono ke findings merge hote hain. Scanner apne rule set pe kabhi miss nahi karta aur hallucinate kar hi nahi sakta; LLM wo pakadta hai jo kisi rule me likha hi nahi hai (missing authorization, business-logic flaw) aur context ke saath samjhata hai. Koi bhi engine dusre ko replace nahi karta. Demo pe number bhi hai: 8 raw findings → 5 dedup ke baad, **3 dono engines ne independently confirm kiye**, aur Bandit ne 2 SQLi sites pakde jo LLM se chhoot gaye the. Jab dono agree karte hain toh severity escalate hoti hai — MD5 wala finding LLM ne *High* kaha tha, Bandit ke confirm karne pe *Critical* ho gaya.
 - **"Agent fail ho jaye toh pata kaise chalega?"** — ye sawaal aa sakta hai, aur iska jawab tumhare paas actually code me hai: "did not run" aur "ran and found nothing" alag states hain (`failed_audits`), aur failed audit kabhi "No issues found" print nahi karta. Neeche implementation notes me detail hai.
 
@@ -113,7 +113,7 @@ collector (including failed and malformed audits), every guardrail pattern, and
 the whole Phase 2 surface: HMAC signature verification, webhook event filtering,
 file-type selection, and added-line extraction from a diff.
 
-**87 tests, no API key needed.** Not covered by the unit tests: the agent
+**97 tests, no API key needed.** Not covered by the unit tests: the agent
 prompts themselves and the PyGithub calls (need a token and a live PR).
 
 The routing decision *is* measured, separately, by `backend/evals/` - 20 labelled
