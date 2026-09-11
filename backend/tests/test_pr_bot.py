@@ -17,6 +17,7 @@ from app.mcp_clients.github_client import (
     added_lines,
     language_for_path,
     parse_pull_request_event,
+    parse_pull_request_url,
 )
 from app.pr_bot import verify_signature
 
@@ -113,6 +114,31 @@ def test_unrelated_payloads_do_not_raise():
 # --------------------------------------------------------------------------- #
 # File selection and diff handling
 # --------------------------------------------------------------------------- #
+
+def test_pr_links_are_parsed_in_the_forms_people_actually_paste():
+    for text in [
+        "https://github.com/acme/widgets/pull/42",
+        "http://www.github.com/acme/widgets/pull/42",
+        "github.com/acme/widgets/pull/42",
+        "  https://github.com/acme/widgets/pull/42/files  ",
+        "acme/widgets#42",
+    ]:
+        ref = parse_pull_request_url(text)
+        assert ref is not None, text
+        assert ref.repo_full_name == "acme/widgets"
+        assert ref.number == 42
+
+
+def test_things_that_are_not_pr_links_are_rejected():
+    for text in [
+        "",
+        "https://github.com/acme/widgets",
+        "https://github.com/acme/widgets/issues/42",
+        "https://gitlab.com/acme/widgets/pull/42",
+        "just some words",
+    ]:
+        assert parse_pull_request_url(text) is None, text
+
 
 def test_known_source_extensions_map_to_a_language():
     assert language_for_path("src/app.py") == "python"

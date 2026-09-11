@@ -10,8 +10,8 @@ Code Guardian is a multi-agent code auditing platform. It coordinates specialize
 > |---|---|
 > | Docs — 9 files: walkthrough, spec, code notes, code Q&A, interview notes, fundamentals, roadmap, setup, build & deploy | ✅ complete |
 > | LangGraph graph, tool-calling supervisor, 3 agents, guardrails | ✅ implemented |
-> | FastAPI `/api/review`, `/api/health`, `/api/graph` | ✅ implemented |
-> | React + Monaco review dashboard | ✅ implemented |
+> | FastAPI `/api/review`, `/api/review-pr`, `/api/health`, `/api/graph` | ✅ implemented |
+> | React dashboard — sidebar, hero, risk donut, agent cards, side-by-side patch, activity feed, analytics | ✅ implemented |
 > | Docker images + Compose stack | ✅ builds and runs |
 > | Phase 2: GitHub PR bot — `/webhook/github`, HMAC auth, PyGithub client | ✅ implemented |
 > | 2b static analysis · 2c risk score · 2d test generation | ✅ implemented |
@@ -21,7 +21,7 @@ Code Guardian is a multi-agent code auditing platform. It coordinates specialize
 >
 > | Check | Result |
 > |---|---|
-> | 97 backend unit tests | pass |
+> | 99 backend unit tests | pass |
 > | Routing eval, 20 labelled cases | security recall **100%** (0 false negatives); performance recall 50% |
 > | Static analysis fusion (vulnerable Python) | 8 raw findings → **5** after dedup; **3 confirmed by both engines**; Bandit added 2 SQLi sites the LLM missed |
 > | Risk score across the three samples | vulnerable Python **100/100 critical**, slow JS **10/100 low**, plain CSS **0/100 none** |
@@ -47,7 +47,7 @@ Code Guardian is a multi-agent code auditing platform. It coordinates specialize
 - **Safety & Guardrails**: secrets scanning + tone guard on every outbound diff, patch and comment. Guardrails AI is used when installed; the default is a local pattern scanner, and `guardrail_report.engine` always names which one ran — see [Build & Deploy](docs/BUILD_AND_DEPLOY.md) for why
 - **Tooling Layer**: PyGithub — fetches PR diffs, posts review comments (not the GitHub MCP server; [why](docs/BUILD_AND_DEPLOY.md))
 - **Backend**: FastAPI (async) — REST API + HMAC-authenticated GitHub webhook listener
-- **Frontend**: React, Tailwind CSS, Monaco Editor
+- **Frontend**: React + Tailwind + Monaco — dashboard with a risk donut, per-agent finding cards, side-by-side patch, generated tests, the agent log, and analytics built from this browser's own review history. Pages that need a GitHub token say so instead of showing placeholder data
 - **Deployment**: Docker & Docker Compose
 
 ## Project Structure
@@ -56,7 +56,7 @@ Code Guardian is a multi-agent code auditing platform. It coordinates specialize
 backend/app/graph.py           # LangGraph state machine (nodes + edges)
 backend/app/state.py           # ReviewerState schema
 backend/app/config.py          # Settings + shared LLM factory
-backend/app/main.py            # FastAPI: /api/review, /api/health, /api/graph, /webhook/github
+backend/app/main.py            # FastAPI: review, review-pr, health, graph, webhook
 backend/app/agents/            # Security, Performance, Patch Generator, Supervisor
 backend/app/agents/static_analysis.py   # Bandit fusion: scan, map, dedupe, merge
 backend/app/guardrails_config/ # Secrets + tone validators on all outbound text
@@ -64,9 +64,11 @@ backend/app/pr_bot.py          # Phase 2: HMAC verification + PR review orchestr
 backend/app/mcp_clients/       # GitHub client (PyGithub): PR diffs, comments
 backend/app/risk.py            # Weighted risk score (findings + size, corroboration-aware)
 backend/app/agents/test_generator.py    # Regression tests (generated, never executed)
-backend/tests/                 # 97 unit tests for the LLM-free seams
+backend/tests/                 # 99 unit tests for the LLM-free seams
 backend/evals/                 # 20 labelled snippets measuring routing recall
-frontend/src/                  # React + Monaco review dashboard
+frontend/src/components/       # Shell, Hero, ReviewPanel, AgentFindings, PatchView
+frontend/src/pages/            # Agents, Analytics, Settings, token-gated pages
+frontend/src/lib/              # Shared palette + browser-local review history
 docs/                          # 9 docs — start with PROJECT_WALKTHROUGH.md
 ```
 
@@ -199,6 +201,26 @@ routing fails the way a test does.
 > docstrings (performance recall went 33% → 50% that way), so the numbers are
 > optimistic — the set is not held out. A fresh set would score lower. To use
 > this as a real regression gate, write new cases and do not tune against them.
+
+## What the dashboard shows — and what it deliberately doesn't
+
+Every number on screen comes from a review that actually ran:
+
+- **Risk donut, agent cards, patch, tests, agent log** — straight from the review.
+- **Recent Activity and Analytics** — built from `localStorage`, because the backend is
+  stateless by design (persistence is Phase 4). They are real, but they live in this
+  browser only: clearing site data wipes them, and they do not follow you to another
+  machine.
+- **`confirmed` badges** mark findings both the LLM and Bandit flagged independently.
+- **Repository, Pull Requests** — these say what they need (`GITHUB_TOKEN`, or repo
+  ingestion that does not exist yet) rather than rendering placeholder rows.
+- **No cost-per-review tile.** It has not been measured, and this project does not
+  display numbers it has not measured.
+
+`POST /api/review-pr` reviews a pull request on demand and **posts nothing** — it
+returns the comment it *would* post, for preview. Only the webhook writes to a
+repository, because reading a PR and commenting on it are different levels of
+consequence.
 
 ## GitHub PR bot (Phase 2)
 

@@ -17,6 +17,7 @@ If you say "MCP" about this project in an interview, say it about
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -124,6 +125,36 @@ def parse_pull_request_event(payload: dict[str, Any]) -> PullRequestRef | None:
         head_sha=str((pull_request.get("head") or {}).get("sha", "")),
         title=str(pull_request.get("title", "")),
     )
+
+
+_PR_URL = re.compile(
+    r"(?:https?://)?(?:www\.)?github\.com/"
+    r"(?P<owner>[A-Za-z0-9_.-]+)/(?P<repo>[A-Za-z0-9_.-]+)"
+    r"/pull/(?P<number>\d+)"
+)
+
+
+def parse_pull_request_url(url: str) -> PullRequestRef | None:
+    """Turn a pasted PR link into a reference.
+
+    Also accepts the bare ``owner/repo#123`` shorthand, because that is what
+    people type when they are reading a PR rather than looking at its URL.
+    """
+    text = (url or "").strip()
+    match = _PR_URL.search(text)
+    if match:
+        return PullRequestRef(
+            repo_full_name=f"{match.group('owner')}/{match.group('repo')}",
+            number=int(match.group("number")),
+            action="manual",
+        )
+
+    short = re.fullmatch(r"([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#(\d+)", text)
+    if short:
+        return PullRequestRef(
+            repo_full_name=short.group(1), number=int(short.group(2)), action="manual"
+        )
+    return None
 
 
 def language_for_path(path: str) -> str | None:

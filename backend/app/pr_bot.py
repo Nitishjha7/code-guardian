@@ -155,26 +155,17 @@ def _render_pr_comment(ref: PullRequestRef, results: list[tuple[ChangedFile, dic
     return "\n".join(lines)
 
 
-def review_pull_request(ref: PullRequestRef) -> PostResult:
-    """Review a PR and post the result. Runs in a background task."""
-    settings = get_settings()
-    try:
-        client = GitHubClient(settings.github_token)
-    except RuntimeError as exc:
-        logger.error("PR bot misconfigured: %s", exc)
-        return PostResult(posted=False, reason=str(exc))
+def collect_reviews(
+    ref: PullRequestRef, client: GitHubClient
+) -> list[tuple[ChangedFile, dict]]:
+    """Review every reviewable file in a PR, without posting anything.
 
-    try:
-        files = client.changed_files(ref.repo_full_name, ref.number, limit=MAX_FILES)
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("Could not read PR files")
-        return PostResult(posted=False, reason=f"could not read PR files: {exc}")
-
-    if not files:
-        logger.info(
-            "PR %s#%s: no reviewable files, skipping", ref.repo_full_name, ref.number
-        )
-        return PostResult(posted=False, reason="no reviewable files in this PR")
+    Split out from :func:`review_pull_request` so the UI can show a PR review
+    without writing a comment to somebody's repository. Reading a PR and
+    commenting on it are different levels of consequence, and only the webhook
+    path should do the second.
+    """
+    files = client.changed_files(ref.repo_full_name, ref.number, limit=MAX_FILES)
 
     results: list[tuple[ChangedFile, dict]] = []
     for changed in files:
@@ -192,9 +183,31 @@ def review_pull_request(ref: PullRequestRef) -> PostResult:
                 "audit_errors": [f"{changed.filename}: {exc}"],
             }
         results.append((changed, state))
+    return results
+
+
+def render_comment(ref: PullRequestRef, results: list[tuple[ChangedFile, dict]]) -> str:
+    """Public wrapper so the API can show the comment it *would* post."""
+    return _render_pr_comment(ref, results)
+
+
+def review_pull_request(ref: PullRequestRef) -> PostResult:
+    """Review a PR and post the result. Runs in a background task."""
+    settings = get_settings()
+    try:
+        client = GitHubClient(settings.github_token)
+    except RuntimeError as exc:
+        logger.error("PR bot misconfigured: %s", exc)
+        return PostResult(posted=False, reason=str(exc))
+
+    try:
+        results = collect_reviews(ref, client)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Could not read PR files")
+        return PostResult(posted=False, reason=f"could not read PR files: {exc}")
 
     if not results:
-        return PostResult(posted=False, reason="no added lines to review")
+        return PostResult(posted=False, reason="no reviewable added lines in this PR")
 
     body = _render_pr_comment(ref, results)
     try:

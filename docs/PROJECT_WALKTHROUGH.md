@@ -300,7 +300,7 @@ to measure on is a flaky test, which is worse than no test.
 
 | Check | Result |
 |---|---|
-| Unit tests | **97 pass**, no API key needed |
+| Unit tests | **99 pass**, no API key needed |
 | Routing eval, 20 cases | **security recall 100%** (0 false negatives); performance recall 50% router-only, 67% as-shipped |
 | Static fusion, vulnerable Python | 8 raw findings → **5** after dedup; **3 confirmed by both engines**; Bandit added 2 SQLi sites the LLM missed |
 | Risk score | vulnerable Python **100/100 critical**, slow JS **10/100 low**, plain CSS **0/100 none** |
@@ -352,7 +352,7 @@ See [ROADMAP](ROADMAP.md).
 ```bash
 docker compose up --build                    # UI :3000, API :8010
 
-cd backend && pytest -q                      # 97 tests, no key needed
+cd backend && pytest -q                      # 99 tests, no key needed
 cd backend && python -m evals.run_routing_eval   # needs a key, ~20 calls
 
 curl https://api.groq.com/openai/v1/models -H "Authorization: Bearer $GROQ_API_KEY"

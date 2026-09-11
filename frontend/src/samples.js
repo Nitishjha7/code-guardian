@@ -7,6 +7,7 @@ export const SAMPLES = [
     id: 'vulnerable-python',
     label: 'Vulnerable Python (SQLi + N+1)',
     language: 'python',
+    filename: 'orders.py',
     code: `import sqlite3
 import hashlib
 
@@ -43,6 +44,7 @@ def check_password(raw, stored_hash):
     id: 'plain-css',
     label: 'Plain CSS (router should skip security)',
     language: 'css',
+    filename: 'card.css',
     code: `.card {
   display: flex;
   flex-direction: column;
@@ -63,6 +65,7 @@ def check_password(raw, stored_hash):
     id: 'slow-js',
     label: 'Slow JavaScript (O(n^2) lookup)',
     language: 'javascript',
+    filename: 'activity.js',
     code: `function mergeUserActivity(users, events) {
   const result = []
 

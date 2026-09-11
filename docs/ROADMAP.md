@@ -18,7 +18,7 @@ hai; [TECHNICAL_SPEC §7](TECHNICAL_SPEC.md) me deferred items ka detail hai.
 | 2e | GitHub Check Run status (gate merges on risk score) | ⬜ next |
 | 3–5 | Advanced Intelligence, Learning & Memory, full CI/CD | ⬜ deliberately deferred |
 
-**Extra jo plan me nahi tha par ban gaya:** routing eval (`backend/evals/`), 97 unit
+**Extra jo plan me nahi tha par ban gaya:** routing eval (`backend/evals/`), 99 unit
 tests, aur poora docs set.
 
 ---
@@ -29,7 +29,7 @@ Jo bhi yahan likha hai wo actually chalaya gaya hai, claim nahi kiya gaya.
 
 | Check | Result |
 |---|---|
-| Unit tests | **97 pass**, koi API key nahi |
+| Unit tests | **99 pass**, koi API key nahi |
 | Routing eval (20 cases) | security recall **100%**, 0 false negatives; performance recall 50% router-only, 67% as-shipped |
 | Static fusion (vulnerable Python) | 8 raw → **5** dedup ke baad; **3 confirmed by both engines**; Bandit ne 2 SQLi extra pakde |
 | Risk score | vuln Python **100/100 critical** · slow JS **10/100 low** · CSS **0/100 none** |

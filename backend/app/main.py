@@ -185,6 +185,106 @@ async def review(request: ReviewRequest) -> ReviewResponse:
     )
 
 
+class ReviewPRRequest(BaseModel):
+    url: str = Field(..., max_length=500, description="PR link or owner/repo#123")
+
+
+class PRFileReview(BaseModel):
+    filename: str
+    language: str
+    additions: int = 0
+    risk: RiskScore = RiskScore()
+    security_issues: list[Finding] = []
+    performance_issues: list[Finding] = []
+    failed_audits: list[str] = []
+    diff: str = ""
+
+
+class ReviewPRResponse(BaseModel):
+    repository: str
+    number: int
+    files: list[PRFileReview]
+    comment_markdown: str
+    posted: bool = False
+
+
+@app.post("/api/review-pr", response_model=ReviewPRResponse)
+async def review_pr(request: ReviewPRRequest) -> ReviewPRResponse:
+    """Review a pull request on demand, **without posting anything**.
+
+    Reading a PR and commenting on it are different levels of consequence. This
+    endpoint only reads: the comment it would post is returned for preview, and
+    only the webhook path actually writes to a repository.
+    """
+    ref = github_client.parse_pull_request_url(request.url)
+    if ref is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not read that as a pull request. Use a github.com PR link "
+            "or the owner/repo#123 shorthand.",
+        )
+
+    settings = get_settings()
+    if not settings.github_token:
+        raise HTTPException(
+            status_code=503,
+            detail="GITHUB_TOKEN is not set, so pull requests cannot be read. "
+            "Add it to backend/.env and restart.",
+        )
+
+    def _run() -> tuple[list, str]:
+        client = github_client.GitHubClient(settings.github_token)
+        results = pr_bot.collect_reviews(ref, client)
+        return results, pr_bot.render_comment(ref, results) if results else ""
+
+    try:
+        results, comment = await anyio.to_thread.run_sync(_run, limiter=_REVIEW_LIMITER)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("PR review failed")
+        text = str(exc).lower()
+        if "404" in text or "not found" in text:
+            raise HTTPException(
+                status_code=404,
+                detail=f"{ref.repo_full_name}#{ref.number} not found, or the token "
+                "cannot see it.",
+            ) from exc
+        if "403" in text or "rate limit" in text:
+            raise HTTPException(
+                status_code=429, detail="GitHub is rate limiting this token."
+            ) from exc
+        raise HTTPException(status_code=502, detail=f"PR review failed: {exc}") from exc
+
+    if not results:
+        raise HTTPException(
+            status_code=422,
+            detail="No reviewable added lines in this PR (only generated, vendored "
+            "or non-source files changed).",
+        )
+
+    return ReviewPRResponse(
+        repository=ref.repo_full_name,
+        number=ref.number,
+        comment_markdown=comment,
+        files=[
+            PRFileReview(
+                filename=changed.filename,
+                language=changed.language,
+                additions=changed.additions,
+                risk=RiskScore(**(state.get("risk") or {})),
+                security_issues=[
+                    Finding(**f) for f in state.get("security_issues", [])
+                ],
+                performance_issues=[
+                    Finding(**f) for f in state.get("performance_issues", [])
+                ],
+                failed_audits=state.get("failed_audits", []),
+                diff=state.get("diff", ""),
+            )
+            for changed, state in results
+        ],
+    )
+
+
 @app.post("/webhook/github", status_code=202)
 async def github_webhook(
     request: Request,

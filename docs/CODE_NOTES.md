@@ -480,7 +480,7 @@ held-out nahi hai, numbers optimistic hain. Fresh set kam score karega.
 
 ---
 
-## backend/tests/ ✅ — 97 tests, koi API key nahi
+## backend/tests/ ✅ — 99 tests, koi API key nahi
 
 Sab deterministic seams pe:
 
@@ -500,24 +500,50 @@ aur PyGithub calls (token + live PR chahiye).
 
 ## frontend/src/ ✅ — React + Vite + Tailwind + Monaco
 
-[App.jsx](../frontend/src/App.jsx) · [FindingCard.jsx](../frontend/src/components/FindingCard.jsx)
+[App.jsx](../frontend/src/App.jsx) · [components/](../frontend/src/components/) ·
+[pages/](../frontend/src/pages/) · [lib/](../frontend/src/lib/)
 
-Char tabs: findings, patch, markdown, agent log.
+Dashboard shell: sidebar nav, top bar, hero pipeline strip, review panel
+(paste / GitHub PR / upload), agent finding cards, side-by-side patch, aur right
+rail me system status + last review + recent activity.
+
+### Routing library kyun nahi hai
+
+Saat pages hain aur koi deep-linking requirement nahi. `useState` se page switch
+karna ek dependency, ek bundle chunk aur ek build step bachata hai. Deep links
+chahiye honge to react-router add karna seedha hai.
+
+Icons bhi inline SVG hain ([Icons.jsx](../frontend/src/components/Icons.jsx)) —
+paanch KB ke paths ek icon library se behtar hain.
 
 ### UI me jo dikhaya, wo isliye dikhaya
 
-- **Risk banner sabse upar** — colour-coded band + drivers.
+- **Risk donut + band + drivers** — ek hi number jo backend compute karta hai, UI
+  apna alag derive nahi karta.
 - **"not run" vs "failed"** alag dikhte hain. Ye poore project ka thesis hai; UI me
   chhupa dete to code me hone ka koi matlab nahi.
-- **`confirmed` badge** (green) jab dono engines ne finding di, `static` (grey) jab
-  sirf Bandit ne.
+- **`confirmed` badge** (green ✓) jab dono engines ne ek hi line di.
 - **Agent log tab** — har node ka faisla, timing ke saath. Demo me yahi dikhata hai
   ki router ne kya chuna.
+- **Generated tests pe warning banner** — *"generated, not executed"*.
+
+### `lib/history.js` — Recent Activity aur Analytics asli kyun hain
+
+Backend stateless hai (persistence Phase 4 hai), to history `localStorage` me
+rehti hai. Matlab har row ek review hai jo **actually chala** — placeholder nahi.
+
+Trade-off chhupaya nahi: site data clear karne pe chali jaati hai, aur doosri
+machine pe nahi jaati. Har read/write `try/catch` me hai kyunki private window aur
+blocked storage dono throw karte hain.
 
 ### Jo jaan-boojh ke nahi dikhaya
 
-Token count aur cost — kyunki wo naapa nahi gaya. Is project ka usool hai: **jo number
-naapa nahi, wo dikhaya nahi jaata.**
+- **Token count aur cost tile** — naapa nahi gaya. Usool: **jo number naapa nahi,
+  wo dikhaya nahi jaata.**
+- **Repository page** fake rows nahi dikhata — wo batata hai ki repo-wide review
+  build hi nahi hui aur kyun.
+- **Pull Requests page** token ke bina kaam nahi karta, aur wahi likha hai —
+  "Connect GitHub" ka jhootha button nahi.
 
 ---
 
