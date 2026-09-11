@@ -1,262 +1,268 @@
-# Code Notes — Kya Kis Liye Hai
+# Code Notes — why each file exists
 
-Har file ka **kyun**. Kya karti hai wo code padh ke dikh jaayega; ye doc wo batata
-hai jo code padh ke nahi dikhta — kaunsa faisla liya gaya aur uske alternatives
-kyun chhode.
+The **why** for every file. What the code does is visible by reading it; this
+document holds what reading it does not show — which decision was made, and which
+alternatives were rejected.
 
-Sawaal-jawab format me yahi cheezein [CODE_QA.md](CODE_QA.md) me hain. Poora system
-kaise chalta hai — [PROJECT_WALKTHROUGH.md](PROJECT_WALKTHROUGH.md).
-
----
-
-## backend/requirements.txt ✅
-
-Teen cheezein dhyan dene layak:
-
-- **`langgraph` + `langchain-groq`**, poora `langchain` nahi. Sirf `StateGraph`,
-  `ToolNode` aur `ChatGroq` chahiye.
-- **`bandit`** — ye ek *runtime* dependency hai, dev tool nahi. Wo `security_audit`
-  ke andar chalti hai, CI me nahi.
-- **`guardrails-ai` commented hai.** Uske kuch hub validators poora torch kheench
-  lete hain. Container jo warna kuch sau MB ka hai, wo GB me chala jaata. Optional
-  rakha, fallback asli guard banaya.
-
-`typing-extensions>=4.12` explicit hai — wajah `state.py` me likhi hai.
+The same material in question-and-answer form is in [CODE_QA.md](CODE_QA.md). How
+the whole system runs is in [PROJECT_WALKTHROUGH.md](PROJECT_WALKTHROUGH.md).
 
 ---
 
-## backend/app/config.py ✅
+## backend/requirements.txt
+
+Three things worth noticing:
+
+- **`langgraph` + `langchain-groq`**, not the whole of `langchain`. Only
+  `StateGraph`, `ToolNode` and `ChatGroq` are needed.
+- **`bandit`** is a *runtime* dependency here, not a dev tool. It runs inside
+  `security_audit`, not in CI.
+- **`guardrails-ai` is commented out.** Some of its hub validators pull a full torch
+  install, taking a container that otherwise fits in a few hundred MB into GB
+  territory. It stays optional; the fallback was written as a real guard.
+
+`typing-extensions>=4.12` is explicit — the reason is in `state.py`.
+
+---
+
+## backend/app/config.py
 
 [config.py](../backend/app/config.py)
 
-Do kaam: settings, aur **LLM factory ek hi jagah**.
+Two jobs: settings, and **a single place that builds the LLM**.
 
-`get_llm()` `lru_cache` ke saath hai, temperature ke hisaab se cached. Supervisor
-aur auditors sab yahin se aate hain, taaki model/temperature/retry ek jagah badle.
+`get_llm()` is `lru_cache`d per temperature. Every agent goes through it, so the
+model, temperature and retry policy change in one place.
 
-**`temperature=0.0` default hai, aur ye deliberate hai.** Supervisor ka kaam
-classification hai, creative writing nahi. Ek bhatakta router is project ka sabse
-bura failure mode hai.
+**`temperature=0.0` is the default, deliberately.** The supervisor's job is
+classification, not creative writing, and a wandering router is this system's worst
+failure mode.
 
-Key na ho to `RuntimeError` phenkta hai jisme **fix likha hota hai** (`cp .env.example`),
-sirf "missing key" nahi. API use 503 me badal deta hai.
+With no key it raises a `RuntimeError` that **contains the fix** (`cp .env.example`),
+not just "missing key". The API turns that into a 503.
 
 ---
 
-## backend/app/state.py ✅
+## backend/app/state.py
 
 [state.py](../backend/app/state.py)
 
-Spec ka `ReviewerState` flat tha. Jo add hua:
+The spec's `ReviewerState` was flat. What was added:
 
-| Field | Kyun |
+| Field | Why |
 |---|---|
-| `messages` + `add_messages` reducer | supervisor tool-calling loop hai, use history chahiye |
-| `force_full_audit` | §3a ka caller-side override |
-| `failed_audits`, `audit_errors` | "chala hi nahi" aur "chala, kuch nahi mila" alag states |
-| `risk` | ek baar compute, sab jagah wahi padha jaaye |
-| `generated_tests`, `tests_note` | 2d ka output |
-| `source` (Finding pe) | `llm`, `bandit:B608`, ya `llm+bandit:B608` |
+| `messages` + `add_messages` reducer | the supervisor is a tool-calling loop and needs history |
+| `force_full_audit` | the caller-side override from §3a |
+| `failed_audits`, `audit_errors` | "never ran" and "ran, found nothing" are different states |
+| `risk` | computed once, read everywhere |
+| `generated_tests`, `tests_note` | output of roadmap item 2d |
+| `source` (on `Finding`) | `llm`, `bandit:B608`, or `llm+bandit:B608` |
 
-### `TypedDict` `typing_extensions` se aata hai — ye ek asli bug tha
+### `TypedDict` comes from `typing_extensions` — this was a real bug
 
-Python 3.11 pe **pydantic `typing.TypedDict` reject karta hai**. Graph compile hi
-nahi hota. Error `build_graph()` pe aata hai, import ke aas-paas kahin nahi — isliye
-dhoondhne me time laga.
+On Python 3.11, **pydantic rejects `typing.TypedDict`**, and the graph will not
+compile at all. The error surfaces at `build_graph()`, nowhere near the import, which
+is why it took a while to find.
 
 ---
 
-## backend/app/agents/supervisor.py ✅ — **project ka differentiating piece**
+## backend/app/agents/supervisor.py — the differentiating piece
 
 [supervisor.py](../backend/app/agents/supervisor.py)
 
-Poore portfolio me yahi ek jagah hai jahan **LLM khud control flow decide karta hai**.
+The one place in the portfolio where **the model decides control flow**.
 
-### Tools ke arguments kyun nahi hain
+### Why the tools take no arguments
 
 [supervisor.py:41](../backend/app/agents/supervisor.py#L41)
 
-`security_audit()` aur `performance_audit()` — dono zero-arg. Code unhe `ContextVar`
-se milta hai.
+`security_audit()` and `performance_audit()` are both zero-arg; the code reaches them
+through a `ContextVar`.
 
-Agar code tool argument hota, to model ko poora diff apne tool call me **wapas likhna**
-padta. Wo input tokens do baar charge karta, aur bada diff model truncate kar sakta tha.
+If the code were a tool argument, the model would have to **write the whole diff back
+out** in its call. Those input tokens are charged twice, and a large diff risks being
+truncated — leaving the auditor with half the code and no way to know.
 
-**`ContextVar`, plain module dict nahi** — API concurrent requests serve karta hai.
-Global dict me do simultaneous reviews ek doosre ka code audit kar lete.
+**A `ContextVar`, not a module dict**: the API serves concurrent requests, and a
+global would let two simultaneous reviews audit each other's code.
 
-### Docstrings hi routing logic hain
+### The docstrings are the routing logic
 
 [supervisor.py:69-107](../backend/app/agents/supervisor.py#L69-L107)
 
-Dono docstrings *criteria* ki tarah likhi hain ("call this when the code does any of…"),
-description ki tarah nahi. Naya agent add karna = ek aur `@tool` + clear docstring.
-Edges rewire nahi hote.
+Both are written as *criteria* ("call this when the code does any of…"), not
+descriptions. Adding an agent is one more `@tool` with a clear docstring; no edges
+are rewired.
 
-Eval ne ye prove kiya: performance docstring ko criteria me badalne se recall
-**33% → 50%** gaya. Sirf docstring badli.
+The eval proved this: rewriting the performance docstring in criteria form moved
+recall **33% → 50%**. Only the docstring changed.
 
-### `_run_audit` ka envelope — silent-pass fix
+### The `_run_audit` envelope — the silent-pass fix
 
 [supervisor.py:50-66](../backend/app/agents/supervisor.py#L50-L66)
 
-Har audit `{"ok": true, "findings": [...]}` ya `{"ok": false, "error": "..."}` deta hai.
+Every audit returns `{"ok": true, "findings": [...]}` or
+`{"ok": false, "error": "..."}`.
 
-Bare array se ye **batana hi possible nahi** ki "audit hua, kuch nahi mila" ya
-"audit chala hi nahi". Ek code reviewer ke liye ye farak sab kuch hai.
+A bare array **cannot express** the difference between "audited, found nothing" and
+"never ran". For a code reviewer that difference is everything.
 
-### `looks_high_stakes` — backstop
+### `looks_high_stakes` — the backstop
 
 [supervisor.py:134-158](../backend/app/agents/supervisor.py#L134-L158)
 
-Jaan-boojh ke over-inclusive. False positive = ek extra audit. False negative =
-chhoot gayi vulnerability.
+Deliberately over-inclusive. A false positive costs one extra audit; a false negative
+costs a vulnerability.
 
-**Bug jo yahin mila:** `\b` underscore aur letter ke beech fire nahi karta. Matlab
-`\bpassword\b` `DB_PASSWORD` aur `check_password` dono miss karta hai — wahi naam jo
-asli code me hote hain. Ab lookarounds hain. Yahi bug secrets guard me bhi tha.
+**The bug found here:** `\b` does not fire between an underscore and a letter, so
+`\bpassword\b` misses both `DB_PASSWORD` and `check_password` — exactly the names real
+code uses. It now uses lookarounds. The same bug was sitting in the secrets guard.
 
-Phrase-shaped patterns (`select … from`, `os.system`) alag regex me hain, kyunki unpe
-wahi boundaries lag hi nahi sakti.
+Phrase-shaped patterns (`select … from`, `os.system`) live in a separate regex,
+because those boundaries cannot apply to them.
 
-### `route_with_llm` alag kyun hai
+### Why `route_with_llm` is separate
 
 [supervisor.py:172](../backend/app/agents/supervisor.py#L172)
 
-Taaki eval **router ko akela** naap sake. Sirf shipped path naapte to backstop model
-ki galtiyan chhupa deta aur number jhootha accha dikhta.
+So the eval can measure **the router alone**. Measuring only the shipped path would
+let the backstop hide the model's mistakes and produce a falsely good number.
 
 ---
 
-## backend/app/agents/security_agent.py ✅
+## backend/app/agents/security_agent.py
 
 [security_agent.py](../backend/app/agents/security_agent.py)
 
-LLM call + Bandit, aur dono ka merge. Prompt me teen cheezein important hain:
+An LLM call plus Bandit, merged. Three things in the prompt matter:
 
 - "Report only issues you can point to in the supplied code."
 - "**An empty array is a valid and often correct answer; do not invent findings to
-  seem thorough.**" — iske bina models har snippet pe kuch na kuch likh dete hain.
-- Severity ki definition di hui hai (Critical = remotely exploitable), model ke
-  apne paimane pe nahi chhoda.
+  seem thorough.**" Without this, models write something on every snippet.
+- Severity is defined for the model (Critical = remotely exploitable) rather than
+  left to its own scale.
 
-Static analysis fail ho to wo **note** banta hai, exception nahi — LLM half succeed
-kar chuka hota hai, aur usko ek optional dependency ki wajah se phenkna galat trade hai.
+If static analysis fails it becomes a **note**, not an exception — the LLM half has
+already succeeded, and throwing that away over an optional dependency is the wrong
+trade.
 
 ---
 
-## backend/app/agents/performance_agent.py ✅
+## backend/app/agents/performance_agent.py
 
 [performance_agent.py](../backend/app/agents/performance_agent.py)
 
-Same shape. `complexity_before` / `complexity_after` isi ke findings pe hote hain.
+Same shape. `complexity_before` / `complexity_after` belong to its findings.
 
-Prompt me explicitly likha hai **"Do not report security issues; another agent owns
-those."** — warna dono auditors ek hi cheez do baar report karte.
+The prompt says explicitly **"Do not report security issues; another agent owns
+those"** — otherwise both auditors report the same thing twice.
 
-Ye project ka kamzor auditor hai: routing recall 50%. Detail [CODE_QA Q13](CODE_QA.md).
+This is the project's weaker auditor: routing recall 50% dev, 43% held-out. Details
+in [CODE_QA Q32](CODE_QA.md).
 
 ---
 
-## backend/app/agents/static_analysis.py ✅ — LLM + Bandit fusion
+## backend/app/agents/static_analysis.py — LLM + Bandit fusion
 
 [static_analysis.py](../backend/app/agents/static_analysis.py)
 
-### Dono engines kyun, ek kyun nahi
+### Why both engines, not one
 
-- Bandit apne rule set pe **kabhi miss nahi karta**, aur jo rule nahi hai wo
-  **hallucinate kar hi nahi sakta**.
-- LLM wo pakadta hai jo kisi rule me likha nahi — missing authorization,
-  business-logic flaw — aur context ke saath samjhata hai.
+- **Bandit** cannot miss a pattern it has a rule for, and cannot **hallucinate** one
+  it does not.
+- **The LLM** catches what no rule encodes — missing authorization, business-logic
+  flaws — and explains it in context.
 
-Koi ek doosre ko replace nahi karta. Isliye merge, aur `source` field se pata chalta
-hai kisne kya diya.
+Neither replaces the other. Hence the merge, and the `source` field so a reader can
+see which engine produced which line.
 
-### Severity matrix — do axes, ek rating
+### The severity matrix — two axes, one rating
 
 [static_analysis.py:41](../backend/app/agents/static_analysis.py#L41)
 
-Bandit severity aur confidence alag deta hai. HIGH severity + LOW confidence ek
-**lead** hai, Critical nahi. Matrix wahi collapse karta hai jaise ek reviewer karta.
+Bandit reports severity and confidence separately. HIGH severity at LOW confidence is
+a **lead**, not a Critical. The matrix collapses them the way a reviewer would.
 
-### `_offending_line` — ek asli bug
+### `_offending_line` — a real bug
 
 [static_analysis.py:93](../backend/app/agents/static_analysis.py#L93)
 
-Bandit ka `code` field aisa aata hai:
+Bandit's `code` field looks like this:
 
 ```
 "2 \n3 DB_PASSWORD = \"hunter2\"\n4 \n"
 ```
 
-Numbered **context** lines. Pehli line lene se padosi (aksar blank) line milti thi.
-Do nuksaan: reader ko galat line dikhti, **aur dedup toot jaata** kyunki hint LLM ke
-quote se match hi nahi karta.
+Numbered **context** lines. Taking the first gave a neighbouring, often blank, line.
+Two harms: the reader saw the wrong line, **and dedup broke silently**, because the
+hint no longer matched the LLM's quote of the real one.
 
-### `_same_line` — containment, equality nahi
+### `_same_line` — containment, not equality
 
 [static_analysis.py:212](../backend/app/agents/static_analysis.py#L212)
 
-LLM expression quote karta hai (`hashlib.md5(...) == stored`), scanner poora statement
-(`return hashlib.md5(...) == stored`). Equality maangte to har aisa pair do baar
-report hota.
+The LLM quotes an expression (`hashlib.md5(...) == stored`); the scanner reports the
+whole statement (`return hashlib.md5(...) == stored`). Requiring equality would report
+every such pair twice.
 
-Length floor (12 chars) isliye hai ki `x = 1` sab kuch na nigal le.
+The 12-character floor stops `x = 1` from swallowing everything.
 
-### Agreement pe severity escalate hoti hai
+### Agreement escalates severity
 
 [static_analysis.py:227](../backend/app/agents/static_analysis.py#L227)
 
-Jispe do independent engines agree karte hain, wahi pehle padhna chahiye. Wording
-LLM ki rehti hai (wo context samjhata hai), tag `llm+bandit:B608` ban jaata hai.
+A finding two independent engines agree on should be read first. The LLM's wording
+survives (it explains the context) and the tag becomes `llm+bandit:B608`.
 
 ---
 
-## backend/app/agents/patch_generator.py ✅
+## backend/app/agents/patch_generator.py
 
 [patch_generator.py](../backend/app/agents/patch_generator.py)
 
-**Diff `difflib` banata hai, LLM nahi.** Models unified diff me hunk headers aur line
-counts galat dete hain, aur aisa patch apply hi nahi hota. Model se sirf rewritten
-file maangi, diff do texts se derive — exact by construction, aur free.
+**The diff is computed by `difflib`, not by the LLM.** Models emit unified diffs with
+wrong hunk headers and line counts, and such a patch will not apply. The model returns
+only the rewritten file; the diff is derived from the two texts — exact by
+construction, and free.
 
-Findings na ho to LLM call hi nahi hoti — no-op rewrite pe paisa nahi lagta.
+With no findings, no LLM call is made at all — no money is spent on a no-op rewrite.
 
-Prompt me: business logic, public API, signatures preserve karo; jo safely fix nahi
-ho sakta uspe `TODO(code-guardian):` comment; secret kabhi hardcode mat karo, env se
-padho.
+The prompt requires: preserve business logic, public API and signatures; mark anything
+unfixable with a `TODO(code-guardian):` comment; never hardcode a secret, read it from
+the environment.
 
 ---
 
-## backend/app/agents/test_generator.py ✅ (2d)
+## backend/app/agents/test_generator.py (roadmap 2d)
 
 [test_generator.py](../backend/app/agents/test_generator.py)
 
-### Kuch execute nahi hota — ye feature hai, kami nahi
+### Nothing is executed — that is a feature, not a gap
 
-LLM ke likhe tests safely chalane ke liye sandbox chahiye: no network, escape-proof
-filesystem, hard timeout. Wo alag infrastructure project hai. Test likh ke dena jise
-insaan padhe aur chalaye — imaandaar 80%. "Verify kar liya" bolna — khatarnak 20%.
+Safely running LLM-authored tests needs a sandbox: no network, an escape-proof
+filesystem, a hard timeout. That is a separate infrastructure project. Writing a test
+a human reads and runs is the honest 80%; claiming "I verified it" is the dangerous
+20%.
 
-Report me likha hai: *"generated, not executed"*.
+The report says so literally: *"generated, not executed"*.
 
-### Node hai, `@tool` nahi — spec se deviation
+### A node, not a `@tool` — a deviation from the spec
 
-Spec ne `@tool` likha tha. §3a ka apna argument hai ki model control flow tabhi
-decide kare jab **judgement** chahiye. "Kaunsa audit is diff pe worth hai?" —
-judgement. "Tests likhne layak findings hain kya?" — ek boolean, jo state me pehle
-se hai. Router tool banate to model ko wo faisla dete jo ek `if` zyada sahi karta,
-aur routing eval ka clean measurement bhi kharab hota.
+The spec said `@tool`. But §3a's own argument is that the model should decide control
+flow only where **judgement** is needed. "Which audit is this diff worth?" is
+judgement. "Are there findings worth testing?" is a boolean already in state — an
+`if` gets it right more often, and a third router tool would also pollute the routing
+eval.
 
-### Performance findings ke tests kyun nahi
+### Why performance findings get no tests
 
-Benchmark ko threshold chahiye. LLM ke paas naapne ke liye machine nahi hai. Uska
-chuna hua threshold flaky test banega — aur flaky test **no test se bura** hai,
-kyunki team red ko ignore karna seekh jaati hai.
+A benchmark needs a threshold, and the LLM has no machine to measure on. Its guess
+produces a flaky test — and a flaky test is **worse than no test**, because it trains
+the team to ignore red.
 
 ---
 
-## backend/app/graph.py ✅ — orchestration
+## backend/app/graph.py — orchestration
 
 [graph.py](../backend/app/graph.py)
 
@@ -266,142 +272,151 @@ supervisor --[none]--------> collect --> patch --> guardrail --> END
                                             \--> tests --/
 ```
 
-### `create_react_agent` kyun nahi
+### Why not `create_react_agent`
 
-Wo ye loop ek line me kar deta, lekin state transitions chhupa deta. **Is project ka
-reviewable artifact orchestration hi hai** — usko prebuilt ke peeche chhupana poora
-point khatam kar deta.
+It would do this loop in one line, but it hides the state transitions. **The
+orchestration is this project's reviewable artifact** — hiding it behind a prebuilt
+defeats the point.
 
-### `_unpack_audit` — silent-pass ka doosra half
+### `_unpack_audit` — the other half of the silent-pass fix
 
 [graph.py:43-68](../backend/app/graph.py#L43-L68)
 
-Jo parse na ho wo **error** hai, empty result nahi. `ToolNode` uncaught exception ko
-plain-text ToolMessage bana deta hai; usko "no findings" padhna hi wo bug tha.
+Anything that fails to parse is an **error**, not an empty result. `ToolNode` turns an
+uncaught exception into a plain-text ToolMessage, and reading that as "no findings"
+*was* the bug.
 
-### `collect_node` me risk score kyun
+### Why the risk score is computed in `collect_node`
 
-[graph.py:108-116](../backend/app/graph.py#L108-L116)
+[graph.py:108](../backend/app/graph.py#L108)
 
-Yahin findings pehli baar complete hoti hain. Ek jagah compute karke report, API, UI
-aur PR comment sab wahi padhte hain — koi apna alag derive nahi karta.
+This is where the findings are first complete. Computing it once means the report, the
+API, the UI and the PR comment all read the same number instead of each deriving its
+own.
 
 ### `_route_after_patch`
 
 [graph.py:162](../backend/app/graph.py#L162)
 
-Deterministic predicate, isliye edge me hai, model ke judgement me nahi.
+A deterministic predicate, so it lives in an edge rather than in a model's judgement.
 
-### `_render_report` — failed audit kabhi "No issues found" nahi chhapta
+### `_render_report` never prints "No issues found" for a failed audit
 
 [graph.py:204](../backend/app/graph.py#L204)
 
-Section teen states jaanta hai: failed, not-run, aur genuinely-clean. Skim karne wala
-reader galat natija na nikaale, isliye incomplete banner **sabse upar** aata hai.
+Each section knows three states: failed, not-run, and genuinely clean. The incomplete
+banner leads the report so a skimming reader cannot draw the wrong conclusion.
 
-### `guardrail_node` report render ke **baad** chalta hai
+### `guardrail_node` runs *after* the report is rendered
 
 [graph.py:319](../backend/app/graph.py#L319)
 
-Taaki model ne agar secret prose me copy kar diya ho to wo bhi pakda jaaye, sirf code
-block ke andar wala nahi.
+So that a secret the model copied into prose is caught too, not only one inside a code
+block.
 
 ---
 
-## backend/app/risk.py ✅ (2c)
+## backend/app/risk.py (roadmap 2c)
 
 [risk.py](../backend/app/risk.py)
 
-### Weights bands ke against calibrated hain
+### The weights are calibrated against the bands
 
 [risk.py:37](../backend/app/risk.py#L37)
 
-Ek Critical → *high*. Do → *critical*. Wajah: ek remotely exploitable vulnerability
-merge rokne ke liye kaafi honi chahiye, jab Check Run gate ye number padhega.
+One Critical → *high*. Two → *critical*. The requirement: a single remotely
+exploitable vulnerability must be enough to stop a merge when the Check Run gate reads
+this number.
 
-Pehle `Critical = 40` tha aur band 50 se shuru hota tha — ek akela Critical *medium*
-dikh raha tha. **Test ne ship hone se pehle pakad liya.**
+The first version used `Critical = 40` against a band starting at 50, so a lone
+Critical scored as *medium*. **A test caught it before it shipped.**
 
-### Teen properties
+### Three properties
 
-1. **Incomplete review kabhi safe nahi dikh sakta** — `band: "unknown"`, `0/none` nahi.
-2. **Findings dominate** — size +25% pe capped, 2000-line clean diff phir bhi 0.
-3. **Corroboration counts** — `llm+bandit` 1.25×; performance 0.4× (slow query ek
-   cost hai, SQL injection ek breach).
+1. **An incomplete review can never look safe** — band `unknown`, not `0/none`.
+2. **Findings dominate** — size is capped at +25%, so a 2000-line clean diff still
+   scores 0.
+3. **Corroboration counts** — `llm+bandit` findings weigh 1.25×; performance findings
+   are discounted to 0.4× (a slow query is a cost, a SQL injection is a breach).
 
-PR level pe **worst file ka** score, average nahi — ek PR utna hi risky hai jitna
-uska sabse khatarnak change.
+Across a PR the **worst file's** score is used, not an average — a PR is exactly as
+risky as its most dangerous change.
 
 ---
 
-## backend/app/guardrails_config/validators.py ✅ — custom, Guardrails AI **optional**
+## backend/app/guardrails_config/validators.py — custom, Guardrails AI optional
 
 [validators.py](../backend/app/guardrails_config/validators.py)
 
-11 secret patterns + 3 tone patterns. Diff, report aur patched code — teeno pe.
+11 secret patterns plus 3 tone patterns, applied to the diff, the report and the
+patched code.
 
-### Guardrails AI optional kyun hai
+### Why Guardrails AI is optional
 
-Uske kuch hub validators poora torch kheench lete hain. `guardrail_report.engine`
-**hamesha** batata hai kaunsa engine chala. Interview me "Guardrails AI use kiya"
-bolna hai to ye disclose karna zaroori hai.
+Some of its hub validators pull a full torch install.
+`guardrail_report.engine` **always** names which engine ran. If you want to say
+"Guardrails AI" in an interview, this has to be disclosed with it.
 
-### Redact karta hai, drop nahi
+### It redacts rather than drops
 
-Reviewer ko patch ki shakal dikhni chahiye. Value `[REDACTED-BY-GUARDRAIL]` ban jaati
-hai, poori line gayab nahi hoti.
+The reviewer needs to see the **shape** of the patch. The value becomes
+`[REDACTED-BY-GUARDRAIL]`; the line does not vanish.
 
-### Placeholder-aware
+### It is placeholder-aware
 
-`os.environ[...]`, `<your-api-key>`, `changeme` — ye wahi hain jo patch agent ko
-**emit karne chahiye**. Inko flag karna guard ko bekaar bana deta.
+`os.environ[...]`, `<your-api-key>`, `changeme` — these are exactly what the patch
+agent is **supposed to emit**. Flagging them would make the guard useless.
 
-### Tone guard me technical vocabulary excluded hai — asli false positive
+### Technical vocabulary is excluded from the tone guard — a real false positive
 
-Ek run me finding likhi thi *"relying on garbage collection"* — bilkul sahi technical
-baat — aur guard ne use **insult** flag kar diya. Ab `garbage collection`,
-`lazy loading/evaluation`, `dumb terminal`, `trash the cache` explicitly excluded hain.
+In one run a finding read *"relying on garbage collection"* — perfectly correct
+technical writing — and the guard flagged it as an insult. `garbage collection`,
+`lazy loading/evaluation`, `dumb terminal` and `trash the cache` are now excluded
+explicitly.
 
-Jo guard correct technical writing pe cry-wolf karta hai, wo guard log ignore karna
-seekh jaate hain — yaani wo kuch bhi protect nahi karta.
+**A guard that cries wolf on correct technical writing is one people learn to
+ignore — and then it protects nothing.**
 
 ---
 
-## backend/app/main.py ✅
+## backend/app/main.py
 
 [main.py](../backend/app/main.py)
 
-### Graph sync hai, isliye threadpool
+### The graph is synchronous, so it runs in a thread
 
 [main.py:44](../backend/app/main.py#L44)
 
-`anyio.CapacityLimiter(4)` — sync LangChain client event loop pe nahi chal sakta, aur
-limiter Groq rate limit ke against concurrent reviews cap bhi karta hai.
+`anyio.CapacityLimiter(4)` — the sync LangChain client must not run on the event loop,
+and the limiter also caps concurrent reviews against the Groq rate limit.
 
-### `Finding` schema fields ko string me coerce karta hai
+### The `Finding` schema coerces fields to strings
 
 [main.py:80-87](../backend/app/main.py#L80-L87)
 
-Findings LLM se aati hain. Model `"line_hint": 42` de de to poora request fail nahi
-hona chahiye.
+Findings come from an LLM. A model returning `"line_hint": 42` should not fail the
+whole request.
 
 ### Error mapping
 
-[main.py:150-168](../backend/app/main.py#L150-L168)
-
-| Status | Kab |
+| Status | When |
 |---|---|
-| 503 | key set hi nahi |
-| 502 | provider ne key reject ki |
-| 429 | rate limit |
-| 500 | baaki sab |
+| 503 | no key configured |
+| 502 | the provider rejected the key |
+| 429 | rate limited |
+| 500 | everything else |
 
-Rejected key ek **configuration problem** hai, review ka bug nahi — operator ko 500
-aur raw provider payload dikhana galat hai.
+A rejected key is a **configuration problem**, not a bug in the review — showing an
+operator a 500 and a raw provider payload would be wrong.
+
+### `/api/review-pr` reads but never writes
+
+It returns the comment it *would* post, for preview. Reading a PR and commenting on it
+are different levels of consequence, and only the webhook should do the second.
 
 ---
 
-## backend/app/pr_bot.py + mcp_clients/github_client.py ✅ (Phase 2)
+## backend/app/pr_bot.py + mcp_clients/github_client.py (Phase 2)
 
 [pr_bot.py](../backend/app/pr_bot.py) ·
 [github_client.py](../backend/app/mcp_clients/github_client.py)
@@ -410,211 +425,222 @@ aur raw provider payload dikhana galat hai.
 
 [pr_bot.py:34](../backend/app/pr_bot.py#L34)
 
-Secret configure nahi hai → **503, kuch process nahi hota**. Public URL jo LLM calls
-chalata hai aur repos me likhta hai, wo denial-of-wallet vector hai. "Secret set karna
-bhool gaya" kabhi "koi bhi bot chala sakta hai" nahi banna chahiye.
+No secret configured → **503, nothing processed**. A public URL that runs LLM calls
+and writes into repositories is a denial-of-wallet vector. "I forgot to set the
+secret" must never become "anyone can drive this bot".
 
-`hmac.compare_digest`, `==` nahi — plain comparison timing se correct prefix length
-leak karta hai aur secret ek-ek byte guess ho jaata hai.
+`hmac.compare_digest`, not `==` — a plain comparison leaks the correct prefix length
+through timing, and the secret can be guessed a byte at a time.
 
-### 202 turant, review background me
+### 202 immediately, review in the background
 
-GitHub 10s baad delivery abandon kar deta hai. Inline karte to har PR webhook log me
-*failed delivery* dikhta.
+GitHub abandons a delivery after 10 seconds. Working inline would make every
+non-trivial PR show as a failed delivery — and GitHub disables webhooks after repeated
+failures.
 
-### Sirf **added lines** review hoti hain
+### Only added lines are reviewed
 
 [github_client.py:144](../backend/app/mcp_clients/github_client.py#L144)
 
-PR reviewer ka kaam naya code hai. Untouched context line pe pre-existing issue flag
-karna wo noise hai jispe author is PR me kuch kar hi nahi sakta.
+A PR reviewer's job is the **new code**. Flagging a pre-existing issue on an untouched
+context line is noise the author cannot act on in this PR — and exactly what trains
+people to ignore bots.
 
 ### File selection
 
-10 files ka cap, **additions ke hisaab se ranked** — cap lage to trivia kate,
-substance nahi. Lockfiles, minified, `node_modules/`, `vendor/`, migrations filtered.
+A 10-file cap, **ranked by additions** so the cap drops trivia rather than substance.
+Lockfiles, minified bundles, `node_modules/`, `vendor/` and migrations are filtered.
 
-**Bug yahan mila:** `/node_modules/` marker root-level `node_modules/x.js` se match
-nahi karta tha, kyunki GitHub paths repo-relative hote hain (leading slash nahi). Ab
-path normalize hota hai.
+**The bug found here:** the `/node_modules/` marker did not match a root-level
+`node_modules/x.js`, because GitHub paths are repo-relative and carry no leading
+slash. Paths are now normalised.
 
-### "MCP" naam — imaandaar baat
+### The "MCP" name — stated honestly
 
-Folder `mcp_clients/` hai, spec me "GitHub MCP Server / PyGithub" likha tha.
-**Ye PyGithub hai.** MCP server chalane ka matlab ek aur (Node) container sirf un REST
-calls ko wrap karne ke liye jo backend already karta hai. MCP ki asli value — *model*
-runtime pe tools discover kare — yahan lagti hi nahi, kyunki ye calls fixed aur
-webhook-driven hain.
+The folder is `mcp_clients/` and the spec said "GitHub MCP Server / PyGithub".
+**This is PyGithub.** Running the MCP server would mean a second (Node) container
+wrapping REST calls this backend already makes, and MCP's real value — a *model*
+discovering and calling tools at runtime — does not apply, because these calls are
+fixed and webhook-driven.
 
-**Interview me "MCP" bolo to `supervisor.py` ke baare me bolo, is file ke baare me nahi.**
+**If you say "MCP" in an interview, say it about `supervisor.py`, not this file.**
 
 ---
 
-## backend/evals/ ✅ — router ko naapne ke liye
+## backend/evals/ — measuring the router
 
 [routing_cases.py](../backend/evals/routing_cases.py) ·
+[routing_cases_holdout.py](../backend/evals/routing_cases_holdout.py) ·
 [run_routing_eval.py](../backend/evals/run_routing_eval.py)
 
-20 labelled snippets. Label ka matlab: *"kya ek sane reviewer is audit ke paise dena
-chahega"* — ye nahi ki auditor ko kuch milega hi.
+Labelled snippets. A label means *"would a sane reviewer pay for this audit"* — not
+*"will the auditor find something"*.
 
-### Do modes zaroori hain
+### Two sets, and why the second was necessary
 
-- `router-only` — model ka judgement akela
-- `as-shipped` — backstop ke saath, jo actually chalta hai
+`routing_cases.py` (dev) was **used for tuning** (performance recall 33% → 50%). A set
+you tune against stops being a measurement — it becomes training signal.
 
-Sirf as-shipped dikhana model ko flatter karta; sirf router-only dikhana asli risk
-overstate karta.
+Hence `routing_cases_holdout.py`: 20 cases **never tuned against**, deliberately
+harder —
 
-### Exit code gate hai
+- **different languages** (Go, Java, SQL, shell); the docstrings were written for
+  Python and JS
+- **adversarial vocabulary** — no-audit cases containing `token`, `auth`, `query` in
+  harmless positions (a `Token` dataclass, an `author` field, an `@media query`).
+  These test whether the model is **reading the code** or matching words, because the
+  backstop keys off exactly those words.
+- **split cases** — a security fix inside a hot loop; a cache with no security surface
 
-Security recall threshold se neeche → exit 1. Prompt ya model change jo routing chupke
-se todta hai, wo test ki tarah fail hota hai.
+**The file's rule, written in its own docstring:** if a case fails, **neither the case
+nor the prompt it failed on may change.** A held-out set you edit after seeing the
+score is just a slower dev set.
 
-**Recall gate hai, precision sirf report hoti hai** — errors symmetric nahi hain.
+Result (`gpt-oss-20b`): as-shipped security recall **100% on both sets**. Router-only
+89% held-out against 90% dev — a one-point gap, so the tuning did not overfit.
 
-### Do sets — aur dusra kyun banana pada
+### Two modes are necessary
 
-`routing_cases.py` (dev) **tune karne me use hua** (performance recall 33% →
-50%). Jis set pe tune kiya, uske numbers optimistic hote hain — wo measurement
-nahi rehta.
+- `router-only` — the model's judgement alone
+- `as-shipped` — with the backstop, i.e. what actually runs
 
-Isliye `routing_cases_holdout.py`: 20 aise cases jinpe **kabhi tune nahi kiya**,
-aur jaan-boojh ke mushkil —
+Reporting only as-shipped flatters the model; reporting only router-only overstates
+the real risk.
 
-- **alag languages** (Go, Java, SQL, shell) — docstrings Python/JS ke liye likhi thi
-- **adversarial vocabulary** — no-audit cases jinme `token`, `auth`, `query`
-  harmless jagah pe hain (`Token` dataclass, `author` field, `@media query`).
-  Ye test karte hain ki model **code padh raha hai** ya sirf shabd match kar raha
-  hai — kyunki backstop unhi shabdon pe chalta hai.
-- **split cases** — security fix jo ek hot loop ke andar hai, cache jisme koi
-  security surface nahi
+### The exit code is a gate
 
-**File ka niyam (uske docstring me likha hai):** agar case fail ho, to **na case
-badlega na wo prompt** jispe wo fail hua. Jo held-out set score dekhne ke baad
-edit ho jaaye, wo bas ek dheema dev set hai.
+Below the security-recall threshold → exit 1. When the held-out set ran, the gate
+reads *its* number, because that is the only uncontaminated one. A prompt or model
+change that quietly breaks routing fails like a test.
 
-Result (`gpt-oss-20b`): as-shipped security recall dono set pe **100%**.
-Router-only 89% holdout vs 90% dev — ek point ka gap, matlab tuning ne overfit
-nahi kiya.
+**Recall gates; precision is only reported** — the errors are not symmetric.
 
-### `_MIN_COVERAGE` — eval ka apna silent-pass
+### `_MIN_COVERAGE` — the eval's own silent pass
 
-Pehla version me errored cases **false negatives** me gin rahe the. Rate limit
-lagi to eval ne "security recall 11%" chhaap diya — jo routing failure lagta hai
-jabki wo infrastructure failure tha.
+The first version counted errored cases as **false negatives**. When a rate limit hit,
+the eval printed "security recall 11%" — which looks like a routing failure but was an
+infrastructure failure.
 
-Ab errored cases score se **exclude** hote hain, aur 80% se kam cases chale to
-**koi number chhapta hi nahi** — `INCONCLUSIVE`, exit 1. Wahi rule jo review
-graph follow karta hai: jo run hua hi nahi, wo clean result nahi hai.
+Errored cases are now **excluded** from scoring, and below 80% coverage **no number is
+printed at all** — `INCONCLUSIVE`, exit 1. The same rule the review graph follows: a
+run that did not happen is not a clean result.
 
 ---
 
-## backend/tests/ ✅ — 99 tests, koi API key nahi
+## backend/tests/ — 99 tests, no API key
 
-Sab deterministic seams pe:
+All on deterministic seams:
 
-| File | Kya |
+| File | Covers |
 |---|---|
 | `test_graph.py` | JSON recovery, diff, routing predicate, collector, failed audits |
-| `test_guardrails.py` | secrets, placeholders, tone (+ technical vocabulary) |
-| `test_static_analysis.py` | Bandit parse, severity matrix, line extraction, merge |
-| `test_risk.py` | ordering properties, incomplete review, size cap |
-| `test_pr_bot.py` | HMAC, event filtering, file selection, added-line extraction |
-| `test_test_generator.py` | selection rule, routing predicate |
+| `test_guardrails.py` | secrets, placeholders, tone (including technical vocabulary) |
+| `test_static_analysis.py` | Bandit parsing, severity matrix, line extraction, merge |
+| `test_risk.py` | ordering properties, incomplete reviews, the size cap |
+| `test_pr_bot.py` | HMAC, event filtering, file selection, PR-link parsing |
+| `test_test_generator.py` | the selection rule and the routing predicate |
 
-Jo **cover nahi** hai: agent prompts khud (sirf asli review se validate hote hain)
-aur PyGithub calls (token + live PR chahiye).
+**Not covered:** the agent prompts themselves (only a real review validates those) and
+the PyGithub calls (they need a token and a live PR).
 
 ---
 
-## frontend/src/ ✅ — React + Vite + Tailwind + Monaco
+## frontend/src/ — React + Vite + Tailwind + Monaco
 
 [App.jsx](../frontend/src/App.jsx) · [components/](../frontend/src/components/) ·
 [pages/](../frontend/src/pages/) · [lib/](../frontend/src/lib/)
 
-Dashboard shell: sidebar nav, top bar, hero pipeline strip, review panel
-(paste / GitHub PR / upload), agent finding cards, side-by-side patch, aur right
-rail me system status + last review + recent activity.
+A dashboard shell: sidebar nav, top bar, review panel (code / pull request / upload),
+a run strip, per-agent finding cards, a side-by-side patch, and a right rail with the
+last review and recent activity.
 
-### UI "AI-generated" na lage — iske liye kya hataya
+### Making it not look generated
 
-Pehla version me hero banner tha, tagline tha, ek quote box ("Better Code, A
-Safer Tomorrow"), sidebar me "AI Agents Working Together" wala promo card, aur
-gradients. **Sab hata diya.**
+The first version had a hero banner, a tagline, a quote box ("Better Code, A Safer
+Tomorrow"), an "AI Agents Working Together" promo card in the sidebar, and gradients.
+**All removed.**
 
-Wajah: jis cheez me banda kaam karta hai, usme marketing copy filler lagti hai —
-aur wahi sabse bada tell hoti hai ki UI generate kiya gaya hai, design nahi.
-Linear, Vercel, GitHub — koi bhi tool apne hi dashboard pe apna tagline nahi
-likhta.
+Reason: in something people are meant to work in, marketing copy reads as filler — and
+it is the clearest tell that a UI was generated rather than designed. Linear, Vercel
+and GitHub do not put their own tagline inside their own dashboard.
 
-Jo niyam lagaya: **jo decorate karne layak tha use delete kiya, style nahi
-kiya.**
+The rule applied: **anything that would have been decorated was deleted instead.**
 
-| Hataya | Kyun |
+| Removed | Why |
 |---|---|
-| Hero banner + tagline | tool me marketing copy |
+| Hero banner + tagline | marketing copy inside a tool |
 | Quote box | pure decoration |
 | Sidebar promo card | filler |
-| 5 static pipeline chips | kabhi badalte nahi the |
-| "Repository" page | kuch karta hi nahi tha |
-| "Dashboard" page | "Code Review" ka duplicate tha |
-| 7 unused icons | dead code |
-| Gradients, blur | tool ko presentation deck bana rahe the |
+| Five static pipeline chips | never changed |
+| "Repository" page | did nothing |
+| "Dashboard" page | duplicated "Code Review" |
+| Seven unused icons | dead code |
+| Gradients, blur | made a tool look like a slide deck |
 
-Nav ab **5 items** hai, aur paanchon kuch karte hain. Health status ek badge me
-aa gaya top bar me (`● openai/gpt-oss-120b`) — alag card ki zaroorat nahi thi.
+Five nav items remain and all five do something. Health moved into a top-bar badge
+(`● openai/gpt-oss-120b`); it did not need a card.
 
-### Routing library kyun nahi hai
+### `RunStrip` — the demo centrepiece
 
-Saat pages hain aur koi deep-linking requirement nahi. `useState` se page switch
-karna ek dependency, ek bundle chunk aur ek build step bachata hai. Deep links
-chahiye honge to react-router add karna seedha hai.
+Shows what the last run actually did, stage by stage. On a CSS file both auditors read
+*skipped*; on vulnerable Python they read *ran*. The routing decision made visible
+rather than described.
 
-Icons bhi inline SVG hain ([Icons.jsx](../frontend/src/components/Icons.jsx)) —
-paanch KB ke paths ek icon library se behtar hain.
+### Why there is no router library
 
-### UI me jo dikhaya, wo isliye dikhaya
+Five pages and no deep-linking requirement, so page state lives in the **URL hash**
+(`lib/router.js`). That gives refresh-safety and a working back button without a
+dependency.
 
-- **Risk donut + band + drivers** — ek hi number jo backend compute karta hai, UI
-  apna alag derive nahi karta.
-- **"not run" vs "failed"** alag dikhte hain. Ye poore project ka thesis hai; UI me
-  chhupa dete to code me hone ka koi matlab nahi.
-- **`confirmed` badge** (green ✓) jab dono engines ne ek hi line di.
-- **Agent log tab** — har node ka faisla, timing ke saath. Demo me yahi dikhata hai
-  ki router ne kya chuna.
-- **Generated tests pe warning banner** — *"generated, not executed"*.
+Hash rather than `history.pushState` because the app is served as static files behind
+nginx — real paths would 404 on reload unless every route were rewritten to
+`index.html`.
 
-### `lib/history.js` — Recent Activity aur Analytics asli kyun hain
+Icons are inline SVG ([Icons.jsx](../frontend/src/components/Icons.jsx)) — a few
+kilobytes of paths beat an icon library.
 
-Backend stateless hai (persistence Phase 4 hai), to history `localStorage` me
-rehti hai. Matlab har row ek review hai jo **actually chala** — placeholder nahi.
+### What the UI shows, and why
 
-Trade-off chhupaya nahi: site data clear karne pe chali jaati hai, aur doosri
-machine pe nahi jaati. Har read/write `try/catch` me hai kyunki private window aur
-blocked storage dono throw karte hain.
+- **Risk donut, band and drivers** — the number the backend computed; the UI never
+  derives its own.
+- **"not run" versus "failed"** are visibly different. That is the project's whole
+  thesis; hiding it in the UI would make its presence in the code pointless.
+- **`confirmed` badge** where both engines flagged the same line.
+- **Agent log tab** — every node's decision with timing. This is what shows the
+  router's choice during a demo.
+- **A warning banner on generated tests** — *"generated, not executed"*.
 
-### Jo jaan-boojh ke nahi dikhaya
+### `lib/history.js` — why Recent Activity and History are real
 
-- **Token count aur cost tile** — naapa nahi gaya. Usool: **jo number naapa nahi,
-  wo dikhaya nahi jaata.**
-- **Repository page** fake rows nahi dikhata — wo batata hai ki repo-wide review
-  build hi nahi hui aur kyun.
-- **Pull Requests page** token ke bina kaam nahi karta, aur wahi likha hai —
-  "Connect GitHub" ka jhootha button nahi.
+The backend is stateless (persistence is Phase 4), so history lives in
+`localStorage`. Every row is therefore a review that **actually ran** — not a
+placeholder.
+
+The trade-off is stated rather than hidden: clearing site data wipes it, and it does
+not follow you to another machine. Every read and write is wrapped in `try/catch`,
+because private windows and blocked storage both throw.
+
+### What is deliberately not shown
+
+- **No token/cost tile** — it has not been measured. The rule: **anything not
+  measured is not displayed.**
+- **The Pull Requests page** says it needs `GITHUB_TOKEN` rather than rendering
+  placeholder rows.
+- **The Repository page was removed** — repo-wide review is not built, and a nav item
+  that leads nowhere is worse than a missing one.
 
 ---
 
-## Docker ✅
+## Docker
 
-- `backend/Dockerfile` — non-root user, `$PORT` respect karta hai (Render/Railway)
-- `backend/Dockerfile.test` — tests, key ki zaroorat nahi
-- `backend/Dockerfile.eval` — routing eval, key chahiye
+- `backend/Dockerfile` — non-root user, respects `$PORT` (Render/Railway)
+- `backend/Dockerfile.test` — tests, no key required
+- `backend/Dockerfile.eval` — routing eval, key required
 - `frontend/Dockerfile` — build + nginx
-- `frontend/nginx.conf` — `/api/` proxy karta hai, isliye browser ko CORS preflight
-  nahi chahiye aur frontend har environment me `VITE_API_URL=/api` ship karta hai
-- `docker-compose.yml` — backend host port **8010** pe (8000 aksar busy hota hai)
+- `frontend/nginx.conf` — proxies `/api/`, so the browser needs no CORS preflight and
+  the frontend ships with `VITE_API_URL=/api` in every environment
+- `docker-compose.yml` — backend on host port **8010** (8000 is commonly taken)
 
 ---
 
-## Aage jo bhi file banegi, uska explanation yahin niche add hoga.
+## Any file added later gets its explanation here.

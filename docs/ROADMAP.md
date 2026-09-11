@@ -1,170 +1,180 @@
-# Roadmap — kya ban chuka, kya bacha, aur kya jaan-boojh ke chhoda
+# Roadmap — what is built, what is left, what is deliberately deferred
 
-Ye doc single source of truth hai status ka. README ka roadmap table isi ka summary
-hai; [TECHNICAL_SPEC §7](TECHNICAL_SPEC.md) me deferred items ka detail hai.
+This is the single source of truth for status. The README's roadmap table
+summarises it; [TECHNICAL_SPEC §7](TECHNICAL_SPEC.md) details the deferred items.
 
 ---
 
-## Current Status
+## Current status
 
 | # | Phase | State |
 |---|---|---|
 | 1 | **Local Code Review Studio** — LangGraph nodes, tool-calling supervisor, `/api/review`, React UI | ✅ done |
 | 2 | **GitHub PR Bot** — HMAC webhook, PyGithub client, PR comment | ✅ done |
-| 2a | Real GitHub repo/PR verification | ⬜ **blocked on a token** |
+| 2a | Verification against a real GitHub repo/PR | ⬜ **blocked on a live PR** |
 | 2b | Static analysis (Bandit) fused into `security_audit` | ✅ done |
 | 2c | Risk score on every review | ✅ done |
 | 2d | Test Generation Agent | ✅ done |
-| 2e | GitHub Check Run status (gate merges on risk score) | ⬜ next |
+| 2e | GitHub Check Run status (gate merges on the risk score) | ⬜ next |
 | 3–5 | Advanced Intelligence, Learning & Memory, full CI/CD | ⬜ deliberately deferred |
 
-**Extra jo plan me nahi tha par ban gaya:** routing eval with a **held-out set**
-(`backend/evals/`, 40 cases), 99 unit tests, aur poora docs set.
+**Built although it was not in the plan:** a routing eval with a **held-out set**
+(`backend/evals/`, 40 cases), 99 unit tests, and the full docs set.
 
 ---
 
 ## Verified numbers
 
-Jo bhi yahan likha hai wo actually chalaya gaya hai, claim nahi kiya gaya.
+Everything here was actually run, not claimed.
 
 | Check | Result |
 |---|---|
-| Unit tests | **99 pass**, koi API key nahi |
-| Routing eval, **held-out** (20 cases, never tuned) | as-shipped security recall **100%**, 0 false negatives; router-only 89%; performance 43% |
+| Unit tests | **99 pass**, no API key needed |
+| Routing eval, **held-out** (20 cases, never tuned against) | as-shipped security recall **100%**, 0 false negatives; router-only 89%; performance 43% |
 | Routing eval, dev (20 cases, tuned against) | as-shipped 100%; router-only 90%; performance 50% |
-| Static fusion (vulnerable Python) | 8 raw → **5** dedup ke baad; **3 confirmed by both engines**; Bandit ne 2 SQLi extra pakde |
-| Risk score | vuln Python **100/100 critical** · slow JS **10/100 low** · CSS **0/100 none** |
+| Static fusion (vulnerable Python) | 8 raw findings → **5** after dedup; **3 confirmed by both engines**; Bandit found 2 SQLi sites the LLM missed |
+| Risk score | vulnerable Python **100/100 critical** · slow JS **10/100 low** · CSS **0/100 none** |
 | Failed audit | band `unknown`, "score unavailable", "Audit failed — this code was not checked" |
-| Test generation | 88 lines pytest, 3 findings ke liye |
-| Router cost contrast | CSS **~0.9s** vs vuln Python **~11.4s** |
+| Test generation | 88 lines of pytest for 3 findings |
+| Router cost contrast | CSS **~0.9s** vs vulnerable Python **~11.4s** |
 | Webhook auth | 202 · 401 · 401 · 503 |
 | API errors | 503 · 502 · 429 |
 | Frontend | production build clean |
 
-**Jo verify nahi hua:** PR bot asli GitHub repo pe (token chahiye), aur agent prompts
-ki quality kisi labelled dataset pe (sirf routing naapa hai, findings nahi).
+**Not verified:** the PR bot against a real repository (needs a live PR), and the
+quality of the agent prompts against a labelled dataset — only routing is
+measured, not the findings themselves.
+
+The eval numbers are from `openai/gpt-oss-20b`, not the default 120b, because the
+120b daily quota was exhausted that day. Re-running on 120b is outstanding.
 
 ---
 
-## Bacha hua kaam
+## Remaining work
 
-### 2a — Real GitHub verification ⬜ **blocked**
+### 2a — Verification against a real PR ⬜ **blocked**
 
-Chahiye: `GITHUB_TOKEN` (repo scope) + ek live PR.
+Needs a live pull request. The token is configured and can read the repo, but the
+repo has no PRs yet.
 
-GitHub API call tak sab tested hai — HMAC, event filtering, file selection, added-line
-extraction. **PyGithub calls khud nahi.**
+Everything up to the GitHub API call is tested — HMAC, event filtering, file
+selection, added-line extraction. **The PyGithub calls themselves are not.**
 
-Steps [README](../README.md#github-pr-bot-phase-2) me hain. Webhook add karne ke baad
-GitHub turant `ping` bhejta hai — Recent Deliveries me `202 {"status":"pong"}` dikhna
-chahiye. Yahi sabse tez confirmation hai ki secret dono taraf match karta hai.
+Steps are in the [README](../README.md#github-pr-bot-phase-2). After adding the
+webhook, GitHub sends a `ping` immediately; Recent Deliveries should show
+`202 {"status":"pong"}`, which is the fastest confirmation that both sides hold
+the same secret.
 
 ### 2e — GitHub Check Run ⬜ next
 
-`pr_bot.py` me already authenticated PyGithub client hai, aur risk score already
-compute hota hai. Ek aur API call chahiye:
+`pr_bot.py` already has an authenticated PyGithub client, and the risk score is
+already computed. One more API call:
 
 ```
-conclusion = "failure"        if risk.band in ("high", "critical")
-             "action_required" if not risk.complete
-             "success"         otherwise
+conclusion = "failure"          if risk.band in ("high", "critical")
+             "action_required"  if not risk.complete
+             "success"          otherwise
 ```
 
-**`action_required` important hai:** incomplete review pe `success` khatarnak hai
-(kisi ne dekha hi nahi) aur `failure` galat hai (pata hi nahi). "Insaan dekhe" hi sahi
-jawab hai.
+**`action_required` matters:** on an incomplete review `success` is dangerous
+(nothing actually looked) and `failure` is wrong (nothing is known). "A human
+should look" is the correct answer.
 
-Isse "posts a comment" → "can gate a merge" ho jaata hai, review graph ko chhue bina.
+This turns "posts a comment" into "can gate a merge" without touching the review
+graph.
 
 ---
 
-## Deliberately deferred — aur kyun
+## Deliberately deferred — and why
 
-Ye items **merit pe reject nahi hue**. Har ek apna multi-week project hai, ek node
-nahi jise ye graph absorb kar sake. Aadha banane se wo "depth over breadth" property
-chali jaati jispe ye project khada hai.
+These are **not rejected on merit**. Each is its own multi-week project rather
+than a node this graph can absorb, and building any of them halfway would cost
+the depth-over-breadth property the project rests on.
 
 ### Phase 3 — Advanced Intelligence Layer
 
 Code Quality, Dependency/License, Documentation agents.
 
-Ye technically aasan hain (har ek ek `@tool`), par **value per agent kam hai** aur
-har naya agent routing precision girata hai. Test Coverage isliye upar promote hua
-(2d) kyunki wo existing pattern me fit hota tha.
+Technically easy (one `@tool` each), but the value per agent is low and each new
+agent lowers routing precision. Test Coverage was promoted out of this phase
+(shipped as 2d) precisely because it fitted the existing pattern.
 
 ### Phase 4 — Learning & Memory
 
-Feedback loop, team-specific rules (RAG), historical PR analysis.
+Feedback loop, team-specific rules via RAG, historical PR analysis.
 
-Chahiye: persistent storage, embeddings, aur ek feedback capture mechanism. Abhi ka
-review graph **stateless** hai — ye uska architecture change hai, addition nahi.
+Needs persistent storage, embeddings and a feedback-capture mechanism. The review
+graph is **stateless** today — this is an architecture change, not an addition.
 
-### Phase 5 — Full CI/CD Integration
+### Phase 5 — Full CI/CD integration
 
 Slack/Discord notifications, auto-created Jira/Linear tickets.
 
-2e wala Check Run gate is phase ka **minimal, high-value slice** hai. Baaki integration
-surface hai, architecture nahi — interview me wo kuch prove nahi karta.
+The Check Run gate (2e) is the minimal high-value slice of this phase. The rest is
+integration surface, not architecture, and proves nothing in an interview.
 
 ### Self-healing patch loop
 
-generate → apply → run tests → regenerate.
+Generate → apply → run tests → regenerate.
 
-Chahiye: **sandboxed execution runtime** (no network, escape-proof filesystem, hard
-timeout). Ye wahi wajah hai jisse 2d generation-only hai. Bina sahi sandbox ke ye tool
-khud ek remote code execution ban jaata — ek *security* tool.
+Needs a **sandboxed execution runtime** (no network, escape-proof filesystem,
+hard timeout). This is why 2d is generation-only: without a correct sandbox, the
+tool would itself become a remote code execution — in a *security* tool.
 
 ### Codebase-wide dependency/impact graph
 
-"Is function ko kaun call karta hai" — AST/Tree-sitter parsing, multi-file context.
+"Who calls this function" — AST/Tree-sitter parsing over multiple files.
 
-Isse cross-file vulnerabilities pakdi ja sakti hain jo abhi chhoot jaati hain (added
-line + purani line ka interaction). Par repo ingestion apne aap me project hai.
-
----
-
-## Known weaknesses — priority order me
-
-Ye khud jaan-na interview me sabse zaroori hai:
-
-1. **Performance routing kamzor hai** — dev set pe 50%, held-out pe 43%. Model
-   performance-only code pe security auditor bula leta hai. Security ke ulta,
-   yahan koi backstop nahi hai jo bachaye.
-3. **Bandit sirf Python.** Baaki languages pe security audit akela LLM hai. Semgrep
-   ek aur `_run_*` function hai — same shape, aur kuch nahi badalta.
-4. **PR bot live verify nahi hua** (2a).
-5. **Koi persistence nahi** — har review stateless.
-6. **20 cases chhota sample hai** — 100% ka confidence interval chauda hai.
+Would catch the cross-file vulnerabilities currently missed (an added line
+interacting with an untouched one). But repo ingestion is a project in itself.
 
 ---
 
-## Agar aur time mile — priority order
+## Known weaknesses, in priority order
 
-| # | Kaam | Effort | Kyun |
+Knowing these yourself is the most important thing for an interview.
+
+1. **Performance routing is weak** — 50% on the dev set, 43% held-out. The model
+   calls the security auditor on code whose only real problem is performance.
+   Unlike security, there is no backstop covering it.
+2. **Bandit is Python-only.** Elsewhere the security audit is the LLM alone.
+   Semgrep would be one more `_run_*` function of the same shape.
+3. **The PR bot has not run against a real repository** (2a).
+4. **No persistence** — every review is stateless.
+5. **20 cases per eval set is small** — the interval around 100% is wide, and the
+   cases are self-written and self-labelled.
+6. **Eval numbers are from 20b, not the default 120b.**
+
+---
+
+## If there is more time — priority order
+
+| # | Task | Effort | Why |
 |---|---|---|---|
-| 1 | **2a** — asli PR pe chalao | 30 min | "real automation" ka claim isi se sach hota hai |
-| 2 | **2e** — Check Run gate | 1-2 hrs | comment → merge gate, risk score already hai |
-| 3 | **Eval dobara 120b pe chalao** | 20 min | abhi ke numbers 20b se hain (120b ka quota khatam tha) |
-| 4 | **Semgrep** multi-language | 2-3 hrs | Bandit-only limitation hatati hai |
-| 5 | Findings quality eval (labelled vulns) | 1 day | abhi sirf routing naapa hai, findings nahi |
-| 6 | Cost/token tracking | 3 hrs | abhi cost ka number bolne layak nahi hai |
+| 1 | **2a** — run against a real PR | 30 min | makes the "real automation" claim true |
+| 2 | **2e** — Check Run gate | 1–2 hrs | comment → merge gate; the score already exists |
+| 3 | Re-run the eval on 120b | 20 min | current numbers are from 20b |
+| 4 | **Semgrep** for multi-language scanning | 2–3 hrs | removes the Bandit-only limitation |
+| 5 | Findings-quality eval (labelled vulnerabilities) | 1 day | only routing is measured today, not findings |
+| 6 | Cost/token tracking | 3 hrs | there is currently no cost number worth quoting |
 
-**1 aur 2 interview se pehle karne layak hain.** 3 sabse imaandaar improvement hai.
+**1 and 2 are worth doing before an interview.** 3 closes the last caveat on the
+headline number.
 
 ---
 
 ## Deployment
 
-Detail [BUILD_AND_DEPLOY.md](BUILD_AND_DEPLOY.md) me hai. Short version:
+Details in [BUILD_AND_DEPLOY.md](BUILD_AND_DEPLOY.md). Short version:
 
 | Part | Platform |
 |---|---|
 | Backend (FastAPI + Docker) | Render / Railway |
 | Frontend (React) | Cloudflare Pages / Vercel |
 
-**Cloudflare Workers backend ke liye nahi chalega** — Python/FastAPI aur long-running
-webhook process uske runtime me fit nahi hain.
+**Cloudflare Workers will not work for the backend** — Python/FastAPI and a
+long-running webhook process do not fit that runtime.
 
-Deploy karne se pehle: `GUARDIAN_MODEL` verify karo (Groq ids retire karta rehta hai),
-`GITHUB_WEBHOOK_SECRET` set karo (warna webhook fail-closed 503 dega), aur
-`GUARDIAN_CORS_ORIGINS` me deployed frontend ka URL daalo.
+Before deploying: verify `GUARDIAN_MODEL` (Groq retires ids), set
+`GITHUB_WEBHOOK_SECRET` (or the webhook fails closed with 503), and add the
+deployed frontend URL to `GUARDIAN_CORS_ORIGINS`.

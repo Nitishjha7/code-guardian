@@ -1,159 +1,160 @@
-# Code Q&A — apne hi code ko defend karne ke liye
+# Code Q&A — defending your own code
 
-Code ban chuka hai. Wo tere naam se jaayega. Interviewer code padhega nahi — wo
-tujhse poochhega *"ye line aise kyun likhi"*. Jo sawaal yahan hain, wahi wahan
-aayenge, kyunki ye code ke **faisle** hain — lines nahi.
+The code exists and it goes out under your name. An interviewer will not read it;
+they will ask *why that line is written that way*. The questions here are the ones
+that will come, because they are the code's **decisions**, not its lines.
 
-**Kaise use karna hai:** sawaal padho, jawab **dekhe bina** bolo. Jahan atke, wahi
-tera kamzor point — usi pe interviewer bhi atkayega. Jawab yaad mat karo; har jawab
-me **kyun** likha hai, wahi samajhna hai. Interviewer follow-up poochhega, aur ratta
-wahin toot jaata hai.
+**How to use this:** read the question, answer it **without looking**. Wherever you
+stall is your weak point — and where the interviewer will push. Do not memorise the
+answers; every one of them contains a *why*, and the why is the part that survives a
+follow-up.
 
-Har sawaal ke saath file di hai — jawab padhne se pehle **code kholo**.
+Each section names the file. **Open the code before reading the answer.**
 
 ---
 
-## 1. `supervisor.py` — tool-calling router
+## 1. `supervisor.py` — the tool-calling router
 
 [backend/app/agents/supervisor.py](../backend/app/agents/supervisor.py)
 
-### Q1. Supervisor har baar dono agents kyun nahi chala deta? Simple to wahi hai.
+### Q1. Why not just run both agents every time? That's simpler.
 
-Static fan-out har submission pe poora cost deta hai. Pure CSS diff pe security
-surface hai hi nahi; config file me algorithmic complexity nahi hoti. Aur bade diffs
-pe specialist prompts hi is system ka sabse bada kharcha hain.
+A static fan-out pays full price on every submission. A pure CSS diff has no
+security surface; a config file has no algorithmic complexity. And on large diffs
+the specialist prompts are the dominant cost in the system.
 
-Naapa hua farak: **CSS sample ~0.9s** (koi auditor nahi chala) vs **vulnerable Python
-~11.4s**. Fan-out me dono cases barabar mehenge hote.
+Measured: **CSS ~0.9s** (no auditor ran) versus **vulnerable Python ~11.4s**. A
+fan-out makes both cost the same.
 
-Doosri wajah zyada important hai: naya agent add karna sirf ek `@tool` likhna hai.
-Graph topology same rehti hai. Fan-out me har naye agent pe edges rewire karni padti.
+The second reason matters more: adding an agent is one more `@tool`. The graph
+topology stays constant. With a fan-out, every new agent means rewiring edges.
 
-### Q2. Tools zero-argument kyun hain? Code ko parameter bana dete.
+### Q2. Why do the tools take no arguments? Pass the code in.
 
 [supervisor.py:41](../backend/app/agents/supervisor.py#L41)
 
-Tab model ko poora diff apne tool call me **wapas likhna** padta. Do nuksaan: wo
-input tokens **do baar** charge hote, aur bada diff model truncate kar sakta tha —
-yaani auditor ko aadha code milta aur wo chup rehta.
+Then the model would have to **write the entire diff back out** inside its own tool
+call. Those input tokens get charged twice, and a large diff risks being truncated —
+which means the auditor silently gets half the code.
 
-Code `ContextVar` se aata hai. **Plain module dict nahi** — API concurrent requests
-serve karta hai, aur global dict me do simultaneous reviews ek doosre ka code audit
-kar lete. ContextVar har run ke apne context me copy hota hai.
+The code arrives through a `ContextVar`. **Not a module-level dict**: the API serves
+concurrent requests, and a global would let two simultaneous reviews audit each
+other's code. A ContextVar is copied into each run's own context.
 
-### Q3. Router galat decide kar de to? Ye to tumhara sabse bada risk hai.
+### Q3. What if the router decides wrong? That's your biggest risk.
 
-Haan, aur ye khud bolna chahiye — yahi maturity dikhata hai.
+Yes — and volunteering this is what shows maturity.
 
-**False negative (security audit skip ho gaya jabki vulnerability thi) wasted tokens
-se kahin bura hai.** Errors symmetric nahi hain. Teen mitigation:
+**A false negative (skipping the security audit on code that had a vulnerability) is
+far worse than wasted tokens.** The errors are not symmetric. Three mitigations:
 
-1. `temperature=0` + docstrings *criteria* ki tarah likhi hui
-2. `force_full_audit` flag + `looks_high_stakes()` static backstop
-3. Labelled eval set jo **recall** naapta hai
+1. `temperature=0` plus docstrings written as criteria
+2. a `force_full_audit` flag and the `looks_high_stakes()` static backstop
+3. a labelled eval set that measures **recall** and gates on it
 
-Aur number bhi hai: **security recall 100%, 0 false negatives** — dono modes me.
-"Hum measure karte hain" bolna kaafi nahi; number bolna is jawab ko strong banata hai.
+And there is a number: **as-shipped security recall 100%, zero false negatives, on a
+held-out set**. Saying "we measure it" is not enough; the number is what makes the
+answer land.
 
-### Q4. `looks_high_stakes` me regex hi to hai. Ye "AI" kahan hua?
+### Q4. `looks_high_stakes` is just a regex. Where is the AI in that?
 
-Ye AI hai bhi nahi, aur honi bhi nahi chahiye. Ye ek **backstop** hai — router ke
-recall risk ka insurance. Jaan-boojh ke over-inclusive: false positive ek extra audit
-ka kharcha hai, false negative ek chhooti hui vulnerability.
+There is none, and there should not be. It is a **backstop** — insurance against the
+router's recall risk. Deliberately over-inclusive: a false positive costs one extra
+audit, a false negative costs a vulnerability.
 
-Agar ye ML hota to iska apna false-negative rate hota, aur backstop ka matlab hi
-khatam ho jaata.
+If it were an ML model it would have its own false-negative rate, which defeats the
+point of a backstop.
 
-### Q5. `\b(password)\b` kaafi tha na? Lookarounds kyun?
+### Q5. Wasn't `\b(password)\b` enough? Why the lookarounds?
 
 [supervisor.py:134](../backend/app/agents/supervisor.py#L134)
 
-Nahi — aur ye ek **asli bug** tha. `\b` underscore aur letter ke beech fire nahi karta,
-kyunki `_` word character hai. Matlab `\bpassword\b`:
+No — and this was a **real bug**. `\b` does not fire between an underscore and a
+letter, because `_` is a word character. So `\bpassword\b` misses:
 
-- `DB_PASSWORD` — miss
-- `check_password` — miss
+- `DB_PASSWORD`
+- `check_password`
 
-Yaani wahi naam jo asli code me hote hain. Test ne pakda. Ab `(?<![A-Za-z0-9])` /
-`(?![A-Za-z0-9])` hain, jo underscore ko boundary maante hain.
+Exactly the names real code uses. A test caught it. The boundaries are now
+`(?<![A-Za-z0-9])` / `(?![A-Za-z0-9])`, which treat an underscore as a boundary.
 
-Yahi bug secrets guard me bhi baitha tha.
+The same bug was sitting in the secrets guard.
 
-### Q6. `route_with_llm` alag function kyun hai? `supervisor_node` me hi to sab hai.
+### Q6. Why is `route_with_llm` a separate function? It's all in `supervisor_node`.
 
 [supervisor.py:172](../backend/app/agents/supervisor.py#L172)
 
-Taaki eval **router ko akele** naap sake. `supervisor_node` me backstop pehle chalta
-hai — usse naapte to jo cases backstop pakadta hai wo model ke credit me chale jaate,
-aur recall jhootha accha dikhta.
+So the eval can measure **the router alone**. In `supervisor_node` the backstop runs
+first — measuring through that would credit the model for cases the backstop caught,
+and the recall number would be falsely good.
 
-Isliye eval do modes report karta hai. Sirf as-shipped dikhana model ko flatter karna
-hai.
+That is why the eval reports two modes. Reporting only as-shipped is flattering the
+model.
 
 ---
 
-## 2. `graph.py` — orchestration aur silent-pass
+## 2. `graph.py` — orchestration and the silent pass
 
 [backend/app/graph.py](../backend/app/graph.py)
 
-### Q7. **(Sabse important sawaal)** Tumhe kaise pata ki tumhara agent actually chala?
+### Q7. (The most important question) How do you know your agent actually ran?
 
-Ye sawaal aaye to lead isi se karo, kyunki ye ek asli bug tha.
+If this comes up, lead with it — it was a real bug.
 
-Groq ne `llama-3.3-70b-versatile` retire kar diya. Har audit 404 dene lagi. LangGraph
-ka `ToolNode` uncaught exception ko **plain-text ToolMessage** bana deta hai; collector
-usko JSON parse karta tha, `[]` milta tha, aur system ne report kiya: **"0 findings"** —
-us code pe jisme Critical SQL injection tha.
+Groq retired `llama-3.3-70b-versatile`. Every audit started returning 404.
+LangGraph's `ToolNode` turns an uncaught exception into a **plain-text
+ToolMessage**; the collector JSON-parsed it, got `[]`, and the system reported
+**"0 findings"** on code containing a Critical SQL injection.
 
-Ek auditing tool ke liye ye sabse bura failure hai: **silence aur pass me farak hi
-khatam ho gaya.**
+For an auditing tool that is the worst possible failure: **silence became
+indistinguishable from a pass.**
 
-Fix teen hisson me:
-1. Har tool `{"ok": bool, ...}` envelope deta hai
-2. Jo parse na ho wo **error** hai, empty result nahi
-3. Report failed audit pe kabhi "No issues found" nahi chhapti — "incomplete review"
-   banner sabse upar aata hai
+The fix has three parts:
+1. every tool returns a `{"ok": bool, ...}` envelope
+2. anything unparseable counts as an **error**, not an empty result
+3. the report never prints "No issues found" for an audit that did not run — it
+   leads with an "incomplete review" banner
 
-Asli jawab: *tumhe pata nahi chalta, jab tak "did not run" ko "ran and found nothing"
-se alag state na banao.*
+The real answer: *you don't know, unless you make "did not run" a distinct state
+from "ran and found nothing".*
 
-### Q8. `_unpack_audit` me bare array bhi accept karte ho. Dead code nahi hai?
+### Q8. `_unpack_audit` still accepts a bare array. Isn't that dead code?
 
 [graph.py:43-68](../backend/app/graph.py#L43-L68)
 
-Forward/backward compatibility ke liye hai — agar koi tool purane format me de, wo
-parse ho jaaye. Lekin **jo parse hi na ho wo error count hota hai**, aur wahi asli
-rule hai.
+It is forward/backward compatibility, so a tool returning the old shape still
+parses. But **anything that fails to parse counts as an error**, and that is the
+rule that matters.
 
-### Q9. Risk score `collect_node` me kyun? Report me compute kar lete.
+### Q9. Why compute the risk score in `collect_node` rather than in the report?
 
 [graph.py:108](../backend/app/graph.py#L108)
 
-Ek jagah compute hoke state me jaata hai, phir report, API, UI aur PR comment sab
-**wahi** padhte hain. Alag-alag jagah derive karte to teen implementations divergent
-ho jaati aur UI ka number PR comment ke number se match nahi karta.
+It is computed once into state, and the report, API, UI and PR comment all read
+*that*. Deriving it separately would give three implementations that drift, and the
+number in the UI would stop matching the number in the PR comment.
 
-### Q10. `_route_after_patch` ek `if` hi to hai. Isko bhi tool bana dete, consistent rehta.
+### Q10. `_route_after_patch` is just an `if`. Why not make that a tool too, for consistency?
 
 [graph.py:162](../backend/app/graph.py#L162)
 
-Consistency galat goal hai yahan. §3a ka apna argument hai: model control flow tabhi
-decide kare jab **judgement** chahiye.
+Consistency is the wrong goal here. §3a's own argument is that the model should own
+control flow only where the decision needs **judgement**:
 
-- "Kaunsa audit is diff pe worth hai?" — judgement. Model behtar hai.
-- "Tests likhne layak findings hain kya?" — boolean over state. Ek `if` **zyada sahi**
-  hai, aur free hai.
+- "Which audit is this diff worth paying for?" — judgement. The model is better.
+- "Are there findings worth writing tests for?" — a boolean over state. An `if` is
+  **more correct**, and free.
 
-Aur router tool banate to routing eval ka clean measurement bhi kharab hota — teesra
-tool recall numbers me ghus jaata.
+Making it a router tool would also pollute the routing eval — a third tool would
+enter the recall numbers.
 
-### Q11. Guardrail report render karne ke baad kyun chalta hai? Findings pe hi laga dete.
+### Q11. Why does the guardrail run after the report is rendered, not on the findings?
 
 [graph.py:319](../backend/app/graph.py#L319)
 
-Kyunki model secret ko **prose me** copy kar sakta hai — explanation me, recommendation
-me. Sirf code block scan karte to wo nikal jaata. Report pehle render hoti hai, phir
-poora text guard se guzarta hai.
+Because the model can copy a secret into **prose** — an explanation, a
+recommendation. Scanning only the code block would miss it. The report is rendered
+first, then the whole text passes through the guard.
 
 ---
 
@@ -161,60 +162,59 @@ poora text guard se guzarta hai.
 
 [backend/app/agents/static_analysis.py](../backend/app/agents/static_analysis.py)
 
-### Q12. **(Sabse zyada poochha jaane wala)** Bandit hai to LLM kyun? Ya LLM hai to Bandit kyun?
+### Q12. (Most likely question) If you have Bandit, why the LLM? If you have the LLM, why Bandit?
 
-Koi ek doosre ko replace nahi karta:
+Neither replaces the other:
 
-- **Bandit** apne rule set pe kabhi miss nahi karta, aur jo rule nahi hai wo
-  **hallucinate kar hi nahi sakta**. Uska false-positive rate ek known, fixed property
-  hai.
-- **LLM** wo pakadta hai jo kisi rule me likha nahi — missing authorization check,
-  business-logic flaw, insecure design — aur context ke saath samjhata hai.
+- **Bandit** cannot miss a pattern it has a rule for, and **cannot hallucinate** one
+  it does not. Its false-positive rate is a known, fixed property of those rules.
+- **The LLM** catches what no rule encodes — a missing authorization check, a
+  business-logic flaw, an insecure design — and explains it in context.
 
-Naapa hua: vulnerable Python pe **8 raw findings → 5** dedup ke baad, **3 dono engines
-ne independently confirm kiye**, aur **Bandit ne 2 SQLi sites pakde jo LLM se chhoot
-gaye the**. Agreement pe severity escalate hui — MD5 wala finding LLM ne *High* kaha
-tha, Bandit ke HIGH/HIGH confirm karne pe *Critical* ho gaya.
+Measured on the vulnerable-Python sample: **8 raw findings → 5 after dedup**, **3
+confirmed by both engines independently**, and **Bandit found 2 SQLi sites the LLM
+missed**. Where they agree, severity escalates — the MD5 finding the LLM rated
+*High* became *Critical* once Bandit flagged it HIGH/HIGH.
 
-### Q13. Bandit ke `code` field ki pehli line hi to offending line hogi?
+### Q13. Isn't the first line of Bandit's `code` field the offending line?
 
 [static_analysis.py:93](../backend/app/agents/static_analysis.py#L93)
 
-Nahi — aur maine yahi galti ki thi. Bandit **numbered context lines** deta hai:
+No — and that was my mistake. Bandit returns **numbered context lines**:
 
 ```
 "2 \n3 DB_PASSWORD = \"hunter2\"\n4 \n"
 ```
 
-Pehli line aksar padosi blank line hoti hai. Do nuksaan the: reader ko galat line
-dikhti thi, **aur dedup chupke se toot gaya tha** kyunki hint LLM ke quote se match hi
-nahi karta tha. Ab line `line_number` se select hoti hai.
+The first is often a neighbouring blank line. Two problems: the reader saw the wrong
+line, **and dedup silently broke**, because the hint no longer matched the LLM's
+quote of the real line. The line is now selected by `line_number`.
 
-Ye end-to-end chalane se mila, schema padh ke nahi.
+This came out of running it end to end, not from reading the schema.
 
-### Q14. Dedup me exact match kyun nahi? Containment to loose hai.
+### Q14. Why containment for dedup instead of exact match? Containment is loose.
 
 [static_analysis.py:212](../backend/app/agents/static_analysis.py#L212)
 
-Kyunki dono engines **alag granularity** pe quote karte hain:
+Because the two engines quote at **different granularity**:
 
 - LLM: `hashlib.md5(raw.encode()).hexdigest() == stored`
 - Bandit: `return hashlib.md5(raw.encode()).hexdigest() == stored`
 
-Equality maangte to har aisa pair **do baar** report hota, aur `confirmed` badge kabhi
-lagta hi nahi — yaani fusion ka sabse useful signal gayab.
+Requiring equality would report every such pair **twice**, and the `confirmed` badge
+would never appear — losing the most useful signal the fusion produces.
 
-Loose hone ka bachaav: 12-char length floor. Usse chhoti lines pe exact match chahiye,
-warna `x = 1` sab kuch nigal leta.
+The guard against looseness is a 12-character floor; below that an exact match is
+required, or `x = 1` would swallow everything.
 
-### Q15. Merge me LLM ki wording kyun rakhi, Bandit ki kyun nahi?
+### Q15. On a merge, why keep the LLM's wording rather than Bandit's?
 
-LLM issue ko **context me samjhata** hai; Bandit ka text rule-shaped hota hai. Lekin
-severity wahi lete hain jo zyada severe ho, aur tag `llm+bandit:B608` ban jaata hai
-taaki corroboration dikhe.
+The LLM **explains the issue in context**; Bandit's text is rule-shaped. But the
+higher of the two severities wins, and the tag becomes `llm+bandit:B608` so the
+corroboration is visible.
 
-Jispe do independent engines agree karte hain, wahi finding sabse pehle padhni chahiye
-— usko chhupana fusion ka sabse bada faayda phenkna hai.
+A finding two independent engines agree on is the one to read first. Hiding that
+would throw away the fusion's biggest benefit.
 
 ---
 
@@ -222,50 +222,50 @@ Jispe do independent engines agree karte hain, wahi finding sabse pehle padhni c
 
 [backend/app/risk.py](../backend/app/risk.py)
 
-### Q16. Weights kahan se aaye? 50, 25, 8, 3 — random to nahi?
+### Q16. Where do the weights come from? 50, 25, 8, 3 look arbitrary.
 
 [risk.py:37](../backend/app/risk.py#L37)
 
-Bands ke **against calibrated** hain, roundness ke liye nahi chune:
+They are **calibrated against the bands**, not chosen for roundness:
 
-- Ek Critical (50) → *high* band
-- Do Critical (100) → *critical*
-- Ek High (25) → *medium*; do High (50) → *high*
+- one Critical (50) → *high* band
+- two Criticals (100) → *critical*
+- one High (25) → *medium*; two Highs (50) → *high*
 
-Requirement ye thi: **ek remotely exploitable vulnerability merge rokne ke liye kaafi
-honi chahiye**, jab Check Run gate ye number padhega.
+The requirement was: **one remotely exploitable vulnerability must be enough to stop
+a merge** once the Check Run gate reads this number.
 
-Pehla version `Critical = 40` tha — ek akela Critical *medium* dikh raha tha. Property
-ke liye likhe test ne ship hone se pehle pakad liya.
+The first version used `Critical = 40`, which scored a lone Critical as *medium*.
+The test written for that property caught it before it shipped.
 
-### Q17. Failed audit pe score 0 hi to hai. Phir alag flag kyun?
+### Q17. On a failed audit the score is 0 anyway. Why flag it separately?
 
-Kyunki `0/100 none` ka matlab hota hai *"dekha, kuch nahi mila"* — jabki hua ye hai ki
-**kisi ne dekha hi nahi**. Wo silent-pass bug hi hai, bas ek number ki shakal me.
+Because `0/100 none` means *"we looked and found nothing"* — when what actually
+happened is that **nothing looked**. That is the silent-pass bug wearing a number.
 
-Isliye `complete: false`, `band: "unknown"`, aur note me likha hota hai kaunsa audit
-nahi chala.
+So it reports `complete: false`, band `unknown`, and names which audit did not run.
 
-### Q18. Diff size ko itna kam weight kyun? Bada diff to zyada risky hota hai.
+### Q18. Why does diff size carry so little weight? Big diffs are riskier.
 
-Review quality diff size ke saath girti hai — ye sach hai. Lekin **2000-line clean
-diff ek 5-line SQL injection se zyada khatarnak nahi hai.**
+Review quality does fall with diff size — true. But **a 2000-line clean diff is not
+more dangerous than a 5-line SQL injection.**
 
-Isliye size ek multiplier hai, +25% pe capped, aur base 0 ho to score 0 hi rehta hai.
-Size apne aap risk manufacture nahi kar sakta.
+So size is a multiplier capped at +25%, and when the base is 0 the score stays 0.
+Size cannot manufacture risk on its own.
 
-### Q19. Performance findings 0.4× kyun? Wo bhi to asli problem hain.
+### Q19. Why are performance findings discounted to 0.4×? They're real problems too.
 
-Hain, lekin alag category ki. **Slow query ek cost hai; SQL injection ek breach hai.**
+They are, but of a different kind. **A slow query is a cost; a SQL injection is a
+breach.**
 
-Agar teen Medium performance notes ek Critical vulnerability se zyada score kar jaate,
-to jo banda is number pe triage karta hai wo actively misled hota.
+If three Medium performance notes could outscore one Critical vulnerability, anyone
+triaging on this number would be actively misled.
 
-### Q20. PR pe average kyun nahi lete? Worst file to outlier ho sakta hai.
+### Q20. Why the worst file on a PR instead of an average? The worst could be an outlier.
 
-Outlier hi to point hai. **Ek PR utna hi risky hai jitna uska sabse khatarnak change.**
-Average lete to ek clean file dusri file ki Critical finding ko dilute kar deti — aur
-gate exactly us case me khul jaata jab band hona chahiye tha.
+The outlier is the point. **A PR is exactly as risky as its most dangerous change.**
+An average lets a clean file dilute another file's Critical finding — opening the
+gate in precisely the case where it should close.
 
 ---
 
@@ -273,211 +273,221 @@ gate exactly us case me khul jaata jab band hona chahiye tha.
 
 [backend/app/guardrails_config/validators.py](../backend/app/guardrails_config/validators.py)
 
-### Q21. Tumne "Guardrails AI" likha hai README me. Wo actually use ho rahi hai?
+### Q21. The README mentions Guardrails AI. Is it actually used?
 
-**Default me nahi.** Aur ye khud bolna hai, warna ek accurate sawaal pe phas jaoge.
+**Not by default** — and volunteer this, or an accurate question will catch you out.
 
-`guardrails-ai` installed ho to use hoti hai, lekin optional dependency hai — uske kuch
-hub validators poora torch kheench lete hain, jo ek aise container ke liye bura trade
-hai jo warna kuch sau MB ka hai.
+`guardrails-ai` is used if installed, but it is optional: some of its hub validators
+pull a full torch install, a bad trade for a container that otherwise fits in a few
+hundred MB.
 
-Default local pattern scanner hai, aur wo placeholder ke taur pe nahi — 11 secret
-patterns, placeholder-aware. `guardrail_report.engine` **hamesha** batata hai kaunsa
-engine chala.
+The default is a local pattern scanner, and not as a placeholder — 11 secret
+patterns, placeholder-aware. `guardrail_report.engine` **always** names which engine
+ran.
 
-### Q22. Secret redact karte ho, poori line drop kyun nahi?
+### Q22. Why redact the secret instead of dropping the whole line?
 
-Reviewer ko patch ki **shakal** dikhni chahiye. Line gayab kar dete to diff padhna
-mushkil ho jaata aur reviewer ko pata hi nahi chalta ki wahan kya tha.
+The reviewer needs to see the **shape** of the patch. Removing the line makes the
+diff harder to read and hides that anything was there.
 
-Value `[REDACTED-BY-GUARDRAIL]` ban jaati hai — secret bahar nahi jaata, context
-bacha rehta hai.
+The value becomes `[REDACTED-BY-GUARDRAIL]` — the secret does not leave, the context
+survives.
 
-### Q23. Tone problems report karte ho par text rewrite nahi karte. Adhoora nahi lagta?
+### Q23. You report tone problems but don't rewrite them. Isn't that half a job?
 
-Nahi — agent ke shabd chupke se badalna ek **prompt regression chhupa dena** hai.
-Agar auditor insulting language likh raha hai to wo prompt ki problem hai, aur usko
-dikhna chahiye. Guard uski report karta hai, maskup nahi.
+No — silently editing the agent's words would **hide a prompt regression**. If an
+auditor is writing insulting language, that is a prompt problem and it should be
+visible. The guard reports it rather than papering over it.
 
-Secrets alag case hai: wahan nuksaan irreversible hai (leak ho gaya to ho gaya), isliye
-wahan redact karte hain.
+Secrets are the opposite case: the damage is irreversible once leaked, so there the
+guard redacts.
 
-### Q24. Tone guard me "garbage" exclude kyun kiya? Wo to insult hi hai.
+### Q24. Why exclude "garbage" from the tone guard? That is an insult.
 
-Ek asli run me finding likhi thi: *"The connection and cursor are created but never
-explicitly closed, relying on **garbage collection**."* — bilkul sahi technical baat.
-Guard ne use "insulting language about the author" flag kar diya.
+In one real run a finding read *"The connection and cursor are created but never
+explicitly closed, relying on **garbage collection**."* — correct technical writing.
+The guard flagged it as "insulting language about the author".
 
-**Jo guard correct technical writing pe cry-wolf karta hai, log usse ignore karna
-seekh jaate hain — aur tab wo kuch bhi protect nahi karta.** Ab `garbage collection`,
-`lazy loading/evaluation`, `dumb terminal`, `trash the cache` excluded hain, par
-"this code is garbage" ab bhi flag hota hai.
+**A guard that cries wolf on correct technical writing is one people learn to
+ignore — and then it protects nothing.** `garbage collection`, `lazy
+loading/evaluation`, `dumb terminal` and `trash the cache` are now excluded, while
+"this code is garbage" still flags.
 
 ---
 
-## 6. `pr_bot.py` — webhook
+## 6. `pr_bot.py` — the webhook
 
 [backend/app/pr_bot.py](../backend/app/pr_bot.py)
 
-### Q25. Secret na ho to webhook allow kyun nahi kar dete? Development me convenient hota.
+### Q25. Why not allow the webhook without a secret? It would be convenient in development.
 
 [pr_bot.py:34](../backend/app/pr_bot.py#L34)
 
-Kyunki wo endpoint **LLM calls chalata hai aur repos me likhta hai**. Bina auth ke wo
-ek denial-of-wallet aur spam vector hai — koi bhi tumhare paise kharch kara sakta hai
-aur tumhare naam se comments post kara sakta hai.
+Because that endpoint **runs LLM calls and writes into repositories**. Unauthenticated,
+it is a denial-of-wallet and a spam vector — anyone can spend your money and post
+comments under your name.
 
-"Secret set karna bhool gaya" kabhi "koi bhi bot chala sakta hai" nahi banna chahiye.
-Isliye **fail closed**: 503, kuch process nahi hota.
+"I forgot to set the secret" must never become "anyone can drive this bot". So it
+**fails closed**: 503, nothing processed.
 
-### Q26. `hmac.compare_digest` kyun, `==` kyun nahi?
+### Q26. Why `hmac.compare_digest` rather than `==`?
 
-`==` pehle mismatch pe return kar deta hai. Wo **timing** se batata hai ki kitne
-characters sahi the — attacker ek-ek byte guess karke secret nikal sakta hai.
-`compare_digest` constant time me compare karta hai.
+`==` returns on the first mismatch, which leaks through **timing** how many
+characters were correct — an attacker can recover the secret byte by byte.
+`compare_digest` compares in constant time.
 
-### Q27. 202 return karke background me kaam? Agar wo fail ho gaya to?
+### Q27. You return 202 and work in the background. What if that work fails?
 
-GitHub ek delivery ko **10 second** baad abandon kar deta hai, aur asli review usse
-zyada leta hai. Inline karte to har non-trivial PR webhook log me *failed delivery*
-dikhta — aur GitHub repeated failures pe webhook disable kar deta hai.
+GitHub **abandons a delivery after 10 seconds**, and a real review takes longer.
+Working inline would make every non-trivial PR show as a failed delivery — and
+GitHub disables webhooks after repeated failures.
 
-Failure chhupti nahi: har file jiska review crash hota hai wo **failed audit** ke roop
-me comment me aata hai, omit nahi hota.
+Failures are not hidden: a file whose review crashes appears in the comment as a
+**failed audit** rather than being omitted.
 
-### Q28. Poori file review kyun nahi karte? Zyada context to behtar hota hai na.
+### Q28. Why only the added lines? More context should be better.
 
 [github_client.py:144](../backend/app/mcp_clients/github_client.py#L144)
 
-PR reviewer ka kaam **naya code** hai. Untouched context line pe pre-existing issue
-flag karna wo noise hai jispe author **is PR me kuch kar hi nahi sakta** — aur wahi
-cheez bots ko ignore karwati hai.
+A PR reviewer's job is the **new code**. Flagging a pre-existing issue on an
+untouched context line is noise the author **cannot act on in this PR** — and that
+is exactly what trains people to ignore bots.
 
-Trade-off imaandaari se: added lines me wo vulnerability chhoot sakti hai jo added
-line + purani line ke **interaction** se banti hai. Wo abhi ki limitation hai.
+The trade-off, stated honestly: a vulnerability created by the *interaction* between
+an added line and an existing one can be missed. That is a current limitation.
 
-### Q29. 10 files ka cap arbitrary nahi hai?
+### Q29. Isn't the 10-file cap arbitrary?
 
-Cap ka number arbitrary hai; cap hona nahi. 200-file PR pe 400 LLM calls chalti.
+The number is; having a cap is not. A 200-file PR would fire 400 LLM calls.
 
-Jo arbitrary **nahi** hai: files **additions ke hisaab se ranked** hain. Cap lage to
-trivia kate, substance nahi. Bina ranking ke jo file GitHub pehle list karta wahi
-review hoti — yaani random.
+What is **not** arbitrary: files are ranked by **additions**, so when the cap bites
+it drops trivia rather than substance. Without ranking you would review whichever
+files GitHub happened to list first — effectively at random.
 
-### Q30. Ye "MCP client" hai. MCP server use kiya?
+### Q30. This is the "MCP client". Did you use an MCP server?
 
-**Nahi.** Folder ka naam `mcp_clients/` hai kyunki spec me wo likha tha, par
-implementation PyGithub hai — aur ye khud bolna zaroori hai.
+**No.** The folder is called `mcp_clients/` because the spec said so, but the
+implementation is PyGithub — and saying so yourself is essential.
 
-MCP server chalane ka matlab hota ek aur (Node) container sirf un REST calls ko wrap
-karne ke liye jo backend already karta hai. **MCP ki asli value — model runtime pe
-tools discover aur call kare — yahan lagti hi nahi**, kyunki PR bot ki GitHub calls
-fixed aur webhook-driven hain, model-chosen nahi.
+Running the MCP server would mean a second (Node) container wrapping REST calls this
+backend already makes. **MCP's real value — a model discovering and calling tools at
+runtime — does not apply here**, because the PR bot's GitHub calls are fixed and
+webhook-driven, not model-chosen.
 
-Is project me model-driven tool calling `supervisor.py` me hai. **"MCP" bolo to uske
-baare me bolo.**
+The model-driven tool calling in this project is in `supervisor.py`. **If you say
+"MCP", say it about that.**
 
 ---
 
-## 7. Eval — sabse zyada follow-up yahin aayega
+## 7. The eval — expect the most follow-ups here
 
 [backend/evals/](../backend/evals/)
 
-### Q31. Security recall 100% hai. Matlab router perfect hai?
+### Q31. Security recall is 100%. Does that mean the router is perfect?
 
-Nahi, aur ye khud bolna hai.
+No, and say so yourself.
 
-Pehle context: **do set hain.** `routing_cases.py` wo hai jispe docstrings tune
-ki (performance recall 33% → 50% usi feedback se), to uske numbers optimistic
-hain. Isliye `routing_cases_holdout.py` banaya — 20 aise cases jinpe **kabhi
-tune nahi kiya**, aur jo jaan-boojh ke mushkil hain: alag languages (Go, Java,
-SQL, shell), aur aise no-audit cases jinme "token"/"auth"/"query" jaise shabd
-harmless jagah pe hain, kyunki backstop unhi shabdon pe chalta hai.
+Context first: **there are two sets.** `routing_cases.py` is the one the docstrings
+were tuned against (performance recall 33% → 50% from its feedback), so its numbers
+are optimistic. That is why `routing_cases_holdout.py` exists — 20 cases **never
+tuned against**, and deliberately harder: different languages (Go, Java, SQL,
+shell), and no-audit cases carrying *token* / *auth* / *query* in harmless positions,
+because the backstop keys off exactly those words.
 
-Same model (`gpt-oss-20b`) pe:
+Same model (`gpt-oss-20b`):
 
 | Set | router-only | as-shipped |
 |---|---|---|
 | dev (tuned) | 90% | 100% |
-| holdout | **89%** | **100%** |
+| held-out | **89%** | **100%** |
 
-Gap sirf 1 point hai — matlab tuning ne overfit nahi kiya. **Ye check karna hi
-wo cheez hai jo log nahi karte**, aur uska hona jawab ko strong banata hai.
+A one-point gap means the tuning did not overfit. **Checking that is the part people
+skip**, and its presence is what makes the answer strong.
 
-Phir bhi jo limitations bachi hain, wo khud bolo:
+Remaining limitations, volunteered:
 
-1. **20 cases chhota set hai** — 100% ka confidence interval chauda hai.
-2. **Maine hi cases likhe aur label lagaye** — bias possible hai.
-3. **Ye numbers 20b pe hain**, default 120b pe nahi (us din uska daily quota
-   khatam ho gaya tha). 120b pe dobara chalana baaki hai.
+1. **20 cases is a small set** — the interval around 100% is wide.
+2. **I wrote and labelled the cases myself** — bias is possible.
+3. **These numbers are from 20b**, not the default 120b (its daily quota was
+   exhausted that day). Re-running on 120b is outstanding.
 
-### Q31b. Holdout set ka niyam kya hai?
+### Q31b. What is the rule for the held-out set?
 
-`routing_cases_holdout.py` ke docstring me likha hai: **agar case fail ho, to
-case bhi nahi badalta aur wo prompt bhi nahi jispe wo fail hua.**
+Written in `routing_cases_holdout.py`'s own docstring: **if a case fails, neither
+the case nor the prompt it failed on may change.**
 
-Jo held-out set score dekhne ke baad edit ho jaaye, wo bas ek dheema dev set
-hai. Sirf genuine mislabel theek karna allowed hai — aur wo itna obvious hona
-chahiye ki tum run se *pehle* bhi theek karte.
+A held-out set you edit after seeing the score is just a slower dev set. Fixing a
+genuine mislabel is the only permitted edit, and it should be obvious enough that
+you would have made it before running anything.
 
-### Q32. Performance recall sirf 50% hai. Ye to kharab hai.
+### Q32. Performance recall is only 50%. That's bad.
 
-Haan, aur yahi is system ka imaandaar weak spot hai. Teen snippets pe model ne
-performance-only code pe *security* auditor bula liya.
+Yes, and it is the honest weak spot. On several snippets the model called the
+*security* auditor on performance-only code. On the held-out set it is worse — 43%.
 
-Tolerable sirf isliye hai ki **errors asymmetric hain**: chhoota performance audit
-ek optimization suggestion ka nuksaan hai; chhoota security audit ek vulnerability ka.
+It is tolerable only because **the errors are asymmetric**: a missed performance
+audit costs an optimization suggestion; a missed security audit costs a
+vulnerability.
 
-Aur ab ye **naapa hua** hai, chhupa hua nahi — jo is number ko pehle se better banata
-hai, kyunki improve karne ke liye baseline chahiye.
+And it is now **measured rather than hidden**, which is better than the number
+suggests — you cannot improve what you have not baselined.
 
-### Q33. Do modes kyun? Ek number bolo na.
+### Q33. Why two modes? Just give me one number.
 
-Kyunki dono alag sawaal ka jawab dete hain:
+Because they answer different questions:
 
-- `router-only` — kya tool docstrings apna kaam kar rahi hain?
-- `as-shipped` — asli risk kya hai?
+- `router-only` — are the tool docstrings doing their job?
+- `as-shipped` — what is the actual risk?
 
-Sirf as-shipped bolna **model ko flatter** karna hai (backstop uski galtiyan pakad
-leta hai). Sirf router-only bolna asli risk **overstate** karna hai.
+Reporting only as-shipped **flatters the model** (the backstop covers its mistakes).
+Reporting only router-only **overstates** the real risk.
 
-### Q34. Precision gate kyun nahi hai? Sirf recall pe fail hota hai.
+### Q34. Why gate on recall and not precision?
 
-Kyunki errors symmetric nahi hain. Recall gire → vulnerability chhooti. Precision gire
-→ kuch paise zyada lagte.
+Because the errors are not symmetric. Recall drops → a vulnerability is missed.
+Precision drops → a little money is wasted.
 
-Ek hi cheez pe fail karna hai to wo recall hai. Precision report hoti hai taaki cost
-dikhe — aur wo dikhti bhi hai: backstop as-shipped performance precision 33% kar deta
-hai, 8 false positives ke saath. Wo intended trade hai, ab quantified.
+If only one can fail the build, it is recall. Precision is reported so the cost stays
+visible — and it is visible: the backstop takes held-out performance precision down
+to 36% with 7 false positives. That is the intended trade, now quantified.
+
+### Q35. Your eval once printed "recall 11%". What happened?
+
+A rate limit — 19 of 20 cases never reached the model, and the runner scored them as
+**false negatives**. An infrastructure failure was reported as a model failure.
+
+That is the same class of bug as the silent pass, in the eval itself. Errored cases
+are now **excluded** from scoring, and below 80% coverage the runner prints **no
+score at all** and exits non-zero.
 
 ---
 
-## 8. Ek cheez jaan-boojh ke nahi ki
+## 8. One thing deliberately not done
 
-### Q35. Tests generate karte ho par chalate nahi. Aadha kaam nahi hai?
+### Q36. You generate tests but never run them. Isn't that half the job?
 
 [test_generator.py](../backend/app/agents/test_generator.py)
 
-LLM ke likhe code ko safely chalane ke liye chahiye: **no network, escape-proof
-filesystem, hard timeout, resource limits.** Wo ek alag infrastructure project hai,
-review agent ka feature nahi.
+Safely executing LLM-authored code needs **no network, an escape-proof filesystem, a
+hard timeout and resource limits**. That is a separate infrastructure project, not a
+review-agent feature.
 
-Test likh ke dena jise insaan padhe aur chalaye — imaandaar **80%**.
-"Maine verify kar liya" bolna — khatarnak **20%**.
+Writing a test a human reads and runs is the honest **80%**. Claiming "I verified it"
+is the dangerous **20%**.
 
-Report me literally likha hai: *"generated, not executed — read them before you trust
-them."* Agar main unhe chalata aur sandbox theek se na hota, to ye tool khud ek
-remote code execution ban jaata — ek **security** tool.
+The report says so literally: *"generated, not executed — read them before you trust
+them."* If I executed them and the sandbox were imperfect, this tool would itself
+become a remote code execution — in a **security** tool.
 
 ---
 
-## Agar kuch na aaye
+## If nothing else comes to mind
 
-Teen cheezein yaad rakho, baaki inse derive ho jaayengi:
+Three principles; everything else derives from them.
 
-1. **"Did not run" aur "found nothing" alag states hain.** Isse `ok/error` envelope,
-   `failed_audits`, risk ka `unknown` band — sab nikalta hai.
-2. **Errors asymmetric hain.** Isse backstop, recall gate, performance ka 0.4×
-   discount, aur default-to-security bias — sab nikalta hai.
-3. **Jo naapa nahi gaya, wo dikhaya nahi jaata.** Isse eval ka hona, cost dashboard ka
-   na hona, aur eval ka caveat — sab nikalta hai.
+1. **"Did not run" and "found nothing" are different states.** From this follow the
+   `ok/error` envelope, `failed_audits`, and the risk score's `unknown` band.
+2. **The errors are not symmetric.** From this follow the backstop, the recall gate,
+   the 0.4× performance discount, and the default-to-security bias.
+3. **Anything not measured is not displayed.** From this follow the eval's
+   existence, the absence of a cost dashboard, and the eval's own caveats.

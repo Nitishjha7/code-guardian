@@ -2,22 +2,14 @@
 
 Roadmap item 2d (docs/TECHNICAL_SPEC.md §7).
 
-**Deliberately generation-only: nothing here executes the code it writes.**
-Running LLM-authored tests safely needs a sandboxed runtime with no network, a
-filesystem it cannot escape, and a hard timeout — that is an infrastructure
-project, not a review-agent feature. Emitting a test a human reads and runs is
-the honest 80% of the value; pretending to have verified it would be the
-dangerous 20%.
+**Generation-only: nothing here executes what it writes.** Running LLM-authored
+tests safely needs a sandbox (no network, escape-proof filesystem, hard timeout)
+— an infrastructure project, not a review-agent feature.
 
-Design note — why this is a **node and not a `@tool`**, which is where the spec's
-sketch put it. §3a's own argument is that the model should decide control flow
-only where the decision needs judgement, and that deterministic control flow
-belongs in graph edges. "Which audits is this diff worth paying for?" needs
-judgement. "Are there findings to write tests for?" does not — it is a boolean
-over state the graph already holds. Making it a router tool would hand the model
-a decision it cannot get right more often than an `if` can, and would break the
-routing eval's clean recall measurement for no gain. So it sits after the patch
-generator, exactly like the patch generator sits after the audits.
+A node, not the `@tool` the spec sketched: §3a says the model should own control
+flow only where the decision needs judgement. "Which audits is this diff worth?"
+does; "are there findings to test?" is a boolean over state the graph already
+holds, and an `if` gets that right more often than a model can.
 """
 
 from __future__ import annotations

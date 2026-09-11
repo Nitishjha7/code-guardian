@@ -1,59 +1,60 @@
-# Code Guardian — Setup Guide
+# Setup Guide
 
-Ye guide repo ko chalane ke liye hai. Agar sirf app run karna hai toh
-[README ka Quick start](../README.md#quick-start) kaafi hai — ye doc us se aage
-ki cheezein cover karta hai (local dev without Docker, git remote, common issues).
+This covers getting the repo running. If you only want to start the app, the
+[Quick start in the README](../README.md#quick-start) is enough — this doc goes
+further: local development without Docker, the git remote, and a troubleshooting
+table.
 
-> **Note:** is doc ka purana version project ka *scaffold banane* ke steps deta
-> tha (`mkdir`, `touch` se khaali files). Wo ab relevant nahi hai — code likha
-> ja chuka hai. Scaffold history git me hai.
+> **Note:** an earlier version of this file described *creating* the scaffold
+> (`mkdir`, `touch` for empty files). That is no longer relevant — the code is
+> written. The scaffold history is in git.
 
 ## Prerequisites
 
-| Cheez | Kyun chahiye |
+| Requirement | Why |
 |---|---|
-| Docker + Docker Compose | sabse aasan raasta — dono services ek command me |
-| Groq API key | agents isi pe chalte hain — https://console.groq.com/keys (free) |
-| Python 3.11+ | sirf agar Docker ke bina backend chalana ho |
-| Node 20+ | sirf agar Docker ke bina frontend chalana ho |
+| Docker + Docker Compose | the simplest path — both services with one command |
+| Groq API key | the agents run on it — https://console.groq.com/keys (free) |
+| Python 3.11+ | only if running the backend without Docker |
+| Node 20+ | only if running the frontend without Docker |
 
-## Step 1: Repo clone karo
+## Step 1: Clone
 
 ```bash
 git clone git@github.com:Nitishjha7/code-guardian.git
 cd code-guardian
 ```
 
-## Step 2: Environment file banao
+## Step 2: Create the environment file
 
 ```bash
 cp backend/.env.example backend/.env
 ```
 
-Phir `backend/.env` me apni key daalo:
+Then put your key in `backend/.env`:
 
 ```
 GROQ_API_KEY=gsk_...
 ```
 
-**Dhyan rakhna:** `=` ke aaspaas space nahi, quotes nahi, aur file **save**
-zaroor karo. `.env` gitignored hai — key kabhi commit nahi hogi.
+No spaces around `=`, no quotes, and **save the file**. `.env` is gitignored, so
+the key is never committed.
 
-## Step 3: Model id verify karo
+## Step 3: Verify the model id
 
-Groq purane model ids retire karta rehta hai. Chalane se pehle check kar lo ki
-jo model set hai wo tumhari key ko dikhta hai:
+Groq retires model ids over time. Before running, check that the configured model
+is one your key can actually see:
 
 ```bash
 curl https://api.groq.com/openai/v1/models \
   -H "Authorization: Bearer $GROQ_API_KEY"
 ```
 
-Default `openai/gpt-oss-120b` hai. **Model tool calling support karta ho ye
-zaroori hai** — supervisor usi pe chalta hai. Agar list me na mile toh koi aur
-tool-calling model `GUARDIAN_MODEL` me daal do.
+The default is `openai/gpt-oss-120b`. **The model must support tool calling** —
+the supervisor depends on it. If the default is not in the list, set any
+tool-calling model in `GUARDIAN_MODEL`.
 
-## Step 4: Chalao
+## Step 4: Run
 
 ```bash
 docker compose up --build
@@ -62,10 +63,10 @@ docker compose up --build
 - UI → http://localhost:3000
 - API → http://localhost:8010/api/health
 
-Health response me `"groq_key_configured": true` dikhna chahiye. `false` hai toh
-Step 2 dobara dekho.
+The health response should show `"groq_key_configured": true`. If it shows
+`false`, revisit Step 2.
 
-## Local dev (Docker ke bina)
+## Local development (without Docker)
 
 ```bash
 # Terminal 1 — backend
@@ -81,20 +82,21 @@ npm install
 npm run dev                        # http://localhost:5173
 ```
 
-Vite dev server `/api` ko `localhost:8000` pe proxy karta hai (Docker ke bina wale flow me backend wahin chalta hai; compose me host port 8010 hai), isliye
-`frontend/.env` chhedne ki zaroorat nahi.
+The Vite dev server proxies `/api` to `localhost:8000` (where the backend runs in
+this flow; under Compose the host port is 8010), so `frontend/.env` needs no
+changes.
 
-## Tests aur eval
+## Tests and eval
 
 ```bash
-# 99 unit tests — koi API key nahi chahiye
+# 99 unit tests — no API key needed
 cd backend && pytest -q
 
-# Routing eval — API key chahiye (~20 LLM calls)
-cd backend && python -m evals.run_routing_eval
+# Routing eval — needs an API key (~40 LLM calls for both sets)
+cd backend && python -m evals.run_routing_eval --set both
 ```
 
-Local Python nahi hai? Docker se:
+No local Python? Use Docker:
 
 ```bash
 docker build -f backend/Dockerfile.test -t cg-test backend && docker run --rm cg-test
@@ -108,26 +110,27 @@ git remote -v
 # origin  git@github.com:Nitishjha7/code-guardian.git
 ```
 
-Agar naye machine pe SSH set nahi hai toh HTTPS use karo:
+If SSH is not set up on a new machine, switch to HTTPS:
 
 ```bash
 git remote set-url origin https://github.com/Nitishjha7/code-guardian.git
 ```
 
-## Common issues
+## Troubleshooting
 
-| Problem | Wajah / fix |
+| Problem | Cause / fix |
 |---|---|
-| `port is already allocated` | Host pe 8000/3000 busy hai. `docker-compose.yml` me host-side port badlo (backend already `8010:8000` pe hai). |
-| `/api/review` → **503** | `GROQ_API_KEY` set nahi hai. |
-| `/api/review` → **502** | Key reject ho gayi — galat ya expire. |
-| `/api/review` → **429** | Groq rate limit. Thodi der baad retry. |
-| Review me "audit failed" banner | Model id galat/dead hai. Step 3 chalao. |
-| `/webhook/github` → **503** | `GITHUB_WEBHOOK_SECRET` set nahi. Ye jaan-boojh ke fail-closed hai. |
-| `/webhook/github` → **401** | Signature match nahi hui — GitHub aur `.env` ka secret same hona chahiye. |
-| Frontend "backend unreachable" | Backend up nahi hai, ya CORS origin `GUARDIAN_CORS_ORIGINS` me nahi hai. |
+| `port is already allocated` | 8000 or 3000 is busy on the host. Change the host side in `docker-compose.yml` (the backend is already on `8010:8000`). |
+| `/api/review` → **503** | `GROQ_API_KEY` is not set. |
+| `/api/review` → **502** | The key was rejected — wrong or expired. |
+| `/api/review` → **429** | Groq rate limit. The free tier is 200k tokens/day per model; try a smaller model or wait for the reset. |
+| Review shows an "audit failed" banner | The model id is wrong or retired. Run Step 3. |
+| `/webhook/github` → **503** | `GITHUB_WEBHOOK_SECRET` is not set. This is deliberate — the webhook fails closed. |
+| `/webhook/github` → **401** | Signature mismatch — GitHub and `.env` must hold the same secret. |
+| Frontend says "backend unreachable" | The backend is down, or its origin is missing from `GUARDIAN_CORS_ORIGINS`. |
 
-## Aage kya
+## Next
 
-- [Technical Specification](TECHNICAL_SPEC.md) — architecture aur graph topology
-- [Build & Deploy Guide](BUILD_AND_DEPLOY.md) — deployment + interview prep
+- [Project Walkthrough](PROJECT_WALKTHROUGH.md) — the whole system in one file
+- [Technical Specification](TECHNICAL_SPEC.md) — architecture and graph topology
+- [Build & Deploy Guide](BUILD_AND_DEPLOY.md) — deployment and interview prep

@@ -4,12 +4,14 @@ import { health, review, reviewPR } from './api'
 import { SAMPLES } from './samples'
 import { CARD, band } from './lib/ui'
 import { fromPR, fromReview, load, record } from './lib/history'
+import { useHashPage } from './lib/router'
 
 import { Icon } from './components/Icons'
 import { MobileNav, Sidebar, TopBar } from './components/Shell'
 import ReviewPanel from './components/ReviewPanel'
 import AgentFindings from './components/AgentFindings'
 import PatchView from './components/PatchView'
+import RunStrip from './components/RunStrip'
 import { LastReviewSummary, RecentActivity } from './components/Summary'
 import {
   AgentsPage,
@@ -21,7 +23,7 @@ import {
 } from './pages/Pages'
 
 export default function App() {
-  const [page, setPage] = useState('review')
+  const [page, setPage] = useHashPage()
   const [backend, setBackend] = useState(null)
 
   const [code, setCode] = useState(SAMPLES[0].code)
@@ -146,24 +148,25 @@ export default function App() {
                 {panel}
 
                 <div ref={resultsRef} className="space-y-4">
-                  {loading && <Working />}
+                  <RunStrip result={result} loading={loading} />
                   {result && !loading && (
                     <>
                       <AgentFindings result={result} onOpenFinding={setOpenFinding} />
                       <PatchView result={result} original={reviewedSource} />
                     </>
                   )}
+                  {!result && !loading && <FirstRunHint />}
                 </div>
               </div>
 
               <aside className="space-y-4">
                 <LastReviewSummary
                   result={result}
-                  onViewAll={() => setPage('analytics')}
+                  onViewAll={() => setPage('history')}
                 />
                 <RecentActivity
                   entries={entries}
-                  onSeeAll={() => setPage('analytics')}
+                  onSeeAll={() => setPage('history')}
                 />
               </aside>
             </div>
@@ -190,7 +193,7 @@ export default function App() {
             </TokenGatedPage>
           )}
 
-          {page === 'analytics' && (
+          {page === 'history' && (
             <AnalyticsPage entries={entries} onChanged={setEntries} />
           )}
 
@@ -212,6 +215,31 @@ function Working({ label = 'Routing the submission…' }) {
     <div className={`${CARD} flex items-center gap-3 px-4 py-5`}>
       <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-700 border-t-indigo-400" />
       <p className="text-sm text-slate-400">{label}</p>
+    </div>
+  )
+}
+
+/** Shown before the first run: what to try, and what to watch for. */
+function FirstRunHint() {
+  return (
+    <div className={`${CARD} px-4 py-4`}>
+      <p className="text-sm text-slate-300">
+        Load a sample above and hit <b className="text-slate-100">Review</b>.
+      </p>
+      <ul className="mt-3 space-y-1.5 text-xs text-slate-500">
+        <li>
+          <b className="text-slate-400">Vulnerable Python</b> — both auditors run;
+          findings marked <span className="text-emerald-400">✓</span> were flagged by
+          the LLM and Bandit independently.
+        </li>
+        <li>
+          <b className="text-slate-400">Plain CSS</b> — the router calls no auditor at
+          all. The strip above shows both as <i>skipped</i>; that decision is the point.
+        </li>
+        <li>
+          <b className="text-slate-400">Slow JavaScript</b> — performance only.
+        </li>
+      </ul>
     </div>
   )
 }

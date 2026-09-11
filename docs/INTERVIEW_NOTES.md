@@ -1,468 +1,466 @@
-# Code Guardian — Complete Interview Prep
+# Interview Preparation
 
-Ye doc pitch, architecture, trade-offs, limitations aur Q&A ek jagah rakhta hai.
-Code-level sawaal [CODE_QA.md](CODE_QA.md) me hain; general concepts
-[AGENT_FUNDAMENTALS.md](AGENT_FUNDAMENTALS.md) me.
+Pitch, architecture, trade-offs, limitations and Q&A in one place. Code-level
+questions live in [CODE_QA.md](CODE_QA.md); general concepts in
+[AGENT_FUNDAMENTALS.md](AGENT_FUNDAMENTALS.md).
 
 ---
 
-## Table of Contents
+## Contents
 
 1. [The 30-second pitch](#1-the-30-second-pitch)
-2. [The problem](#2-the-problem)
-3. [Is this real or a portfolio toy?](#3-is-this-real-or-a-portfolio-toy)
-4. [What the system actually does](#4-what-the-system-actually-does)
-5. [Architecture](#5-architecture)
-6. [Core USPs](#6-core-usps)
-7. [Design trade-offs](#7-design-trade-offs)
-8. [Limitations & mitigations](#8-limitations--mitigations)
-9. [How to present it](#9-how-to-present-it)
-10. [Anticipated questions](#10-anticipated-questions)
-11. [Positioning alongside the other projects](#11-positioning-alongside-the-other-projects)
-12. [Demo strategy](#12-demo-strategy)
-13. [Resume one-liner](#13-resume-one-liner)
-14. [Honesty checklist — what NOT to claim](#14-honesty-checklist--what-not-to-claim)
-15. [An honest assessment of how strong this is](#15-an-honest-assessment)
+2. ["Everyone builds this"](#2-everyone-builds-this--how-to-answer)
+3. [The problem](#3-the-problem)
+4. [Real project or portfolio toy?](#4-real-project-or-portfolio-toy)
+5. [What the system does](#5-what-the-system-does)
+6. [Architecture](#6-architecture)
+7. [Core USPs](#7-core-usps)
+8. [Design trade-offs](#8-design-trade-offs)
+9. [Limitations](#9-limitations)
+10. [How to present it](#10-how-to-present-it)
+11. [Anticipated questions](#11-anticipated-questions)
+12. [Positioning alongside the other projects](#12-positioning-alongside-the-other-projects)
+13. [Demo script](#13-demo-script)
+14. [Resume line](#14-resume-line)
+15. [Honesty checklist](#15-honesty-checklist--what-not-to-claim)
+16. [An honest assessment](#16-an-honest-assessment)
 
 ---
 
 ## 1. The 30-second pitch
 
-> Code Guardian ek multi-agent code reviewer hai. Ek LLM supervisor decide karta hai
-> ki diye hue diff pe kaunse specialist auditors chalane chahiye — security,
-> performance, dono, ya koi nahi. Security auditor ke andar Bandit bhi chalta hai,
-> to har finding pe pata hota hai ki wo LLM ne di, scanner ne di, ya dono ne
-> independently. Findings ek risk score me badalti hain, ek patch me, aur ek
-> regression test me. Aur ek audit agar fail ho jaaye, system **kabhi** "no issues
-> found" nahi bolta — wo poore review ko incomplete mark karta hai.
+> Code Guardian is a multi-agent code reviewer. An LLM supervisor decides which
+> specialist auditors a given diff actually needs — security, performance, both,
+> or neither. Bandit runs inside the security auditor, so every finding carries
+> whether the LLM found it, the scanner found it, or both did independently.
+> Findings become a risk score, a patch and a regression test. And if an audit
+> fails, the system **never** says "no issues found" — it marks the whole review
+> incomplete.
 >
-> Router ko naapa bhi hai — aur **held-out set** pe: as-shipped security recall 100%,
-> zero false negatives, us data pe jispe kabhi tune nahi kiya.
+> The routing is measured, on a **held-out** set: as-shipped security recall
+> 100%, zero false negatives, on data that was never tuned against.
 
-Teen cheezein isme jaan-boojh ke hain: **model control flow decide karta hai**,
-**deterministic scanner LLM ke saath fused hai**, aur **failure silence se alag hai**.
-
----
-
-## 1b. "Ye to sab bana rahe hain" — iska jawab
-
-**Ye sawaal aayega, aur wo galat nahi hai.** "AI code reviewer" crowded hai —
-CodeRabbit, Greptile, Qodo, Sourcery, GitHub ka apna review. Aur "LangGraph
-multi-agent project" abhi portfolio me sabse zyada dikhne wala project hai.
-
-Isliye **product mat becho.** Product bechoge to wo sach me bolega "ye to sab
-bana rahe hain", aur wo sahi hoga.
-
-### Jawab ye hai
-
-> "Ye product ke liye nahi banaya. Domain isliye chuna kyunki iska **ground
-> truth measurable** hai — main keh sakta hoon ki mera agent sahi chala ya nahi.
-> Jo dikhana tha wo orchestration aur failure handling hai, code review nahi."
-
-Ye attack-proof hai, kyunki tum wo claim kar hi nahi rahe jo wo tod sakein.
-
-### Teen cheezein jo baaki candidates ke paas nahi hongi
-
-Idea common hai; **ye teen** portfolio projects me lagbhag kabhi nahi dikhti:
-
-1. **Silent-pass bug ki kahani.** System ne Critical SQL injection wale code pe
-   "0 findings" bola tha kyunki `ToolNode` exception ko plain text bana deta
-   hai. Pakda, schema level pe fix kiya, tests se pin kiya. Aur ye **production
-   me dobara dikha** — Groq rate limit lagi aur system ne `0/100 clean` nahi,
-   `unknown — incomplete` bola. Ye live demo kar sakte ho.
-2. **Agent naapa hua hai, aur held-out set pe naapa hai.** Zyadatar log apne
-   agent ko naapte hi nahi. Jo naapte hain wo held-out nahi rakhte.
-3. **Deterministic scanner LLM ke saath fused hai**, provenance tagging ke
-   saath. Zyadatar portfolio projects pure-LLM hote hain aur "hallucinate kare
-   to?" ka koi structural jawab nahi hota.
-
-### Jisse lead NAHI karna
-
-LangGraph, StateGraph, multi-agent, FastAPI, Docker — **table stakes**. Inse
-shuru karoge to project average lagega. Ye background me rehne do.
-
-**Seedhi baat:** is project ki strength architecture nahi hai — wo average hai.
-Strength engineering judgement hai, aur wo average nahi hai. §15 me iska poora
-assessment hai.
+Three things are deliberate here: **the model decides control flow**, **a
+deterministic scanner is fused with the LLM**, and **failure is distinct from
+silence**.
 
 ---
 
-## 2. The problem
+## 2. "Everyone builds this" — how to answer
 
-Manual code review slow hai aur subtle cheezein miss karta hai — SQL injection,
-resource leak, N+1 query.
+**This question will come, and it is not wrong.** AI code review is crowded —
+CodeRabbit, Greptile, Qodo, Sourcery, GitHub's own review. And "LangGraph
+multi-agent project" is currently the most common portfolio project in agentic AI.
 
-Lekin asli sawaal ye hai: **"LLM se review karwa lo" wala naive solution kyun kaafi
-nahi?** Teen wajah:
+So **do not sell the product.** If you do, the honest response is "everyone builds
+this", and they would be right.
 
-| Problem | Naive prompt | Yahan |
+### The answer
+
+> "This was not built as a product. I chose the domain because its ground truth is
+> measurable — I can tell you whether my agent routed correctly. What I set out to
+> show is orchestration and failure handling, not code review."
+
+That is attack-proof, because you are not making the claim they can break.
+
+### Three things other candidates will not have
+
+The idea is common; these three almost never appear in portfolio projects:
+
+1. **The silent-pass bug story.** The system once reported "0 findings" on code
+   with a Critical SQL injection, because `ToolNode` turns an exception into a
+   plain text message. Caught it, fixed it at schema level, pinned it with tests.
+   And it **showed up again in production** — a Groq rate limit hit, and the
+   system said `unknown — incomplete` rather than `0/100 clean`. You can demo it
+   live.
+2. **The agent is measured, on a held-out set.** Most people never measure their
+   agent. Those who do rarely hold a set back.
+3. **A deterministic scanner fused with the LLM**, with provenance tagging. Most
+   portfolio projects are pure-LLM and have no structural answer to "what if it
+   hallucinates?".
+
+### What not to lead with
+
+LangGraph, StateGraph, multi-agent, FastAPI, Docker — **table stakes**. Start
+there and the project reads as average. Keep them in the background.
+
+**Put plainly:** the architecture is not this project's strength — that part is
+average. The engineering judgement is, and that part is not. Full assessment in §16.
+
+---
+
+## 3. The problem
+
+Manual review is slow and misses subtle defects — SQL injection, resource leaks,
+N+1 queries.
+
+But the real question is: **why is "just prompt an LLM to review it" not enough?**
+
+| Problem | Naive prompt | Here |
 |---|---|---|
-| Ek generalist prompt security aur performance dono deeply audit nahi karta | ek hi prompt, shallow dono jagah | alag personas, focused criteria |
-| Har submission pe poora cost | CSS file pe bhi full security analysis | router decide karta hai, CSS pe ~0.9s |
-| LLM chup ho gaya — miss kiya ya chala hi nahi? | pata hi nahi chalta | `failed_audits` alag state |
-| LLM hallucinate kar sakta hai | koi second opinion nahi | Bandit fused, `confirmed` tag |
+| One generalist prompt cannot deeply audit security *and* performance | shallow on both | separate personas, focused criteria |
+| Full cost on every submission | full security analysis on a CSS file | the router decides — CSS takes ~0.9s |
+| The LLM said nothing — did it miss, or never run? | indistinguishable | `failed_audits` is a separate state |
+| The LLM can hallucinate | no second opinion | Bandit fused, `confirmed` tag |
 
 ---
 
-## 3. Is this real or a portfolio toy?
+## 4. Real project or portfolio toy?
 
-Imaandaar jawab: **ye ek working system hai jise production me chalane se pehle kaam
-chahiye.**
+Honest answer: **a working system that would need work before production.**
 
-Kya asli hai:
-- Docker stack chalti hai, dono entry points (UI + webhook) live verify hue
-- 99 unit tests, koi API key ke bina
-- Router ka recall **naapa** hua hai, assume nahi
-- Paanch bugs asli runs se mile (neeche §8)
+What is real:
+- The Docker stack runs; both entry points (UI and webhook) verified live
+- 99 unit tests, no API key required
+- Routing recall is **measured** on a held-out set, not assumed
+- Six bugs came out of real runs (§9 and the walkthrough)
 
-Kya nahi hai:
-- PR bot asli repo pe kabhi nahi chala (token chahiye)
-- Ek hi language ka static scanner (Bandit = Python only)
-- Koi persistence nahi — har review stateless hai
-- Cost per review naapa nahi gaya
+What is not:
+- The PR bot has never run against a real repository
+- One language of static scanning (Bandit is Python-only)
+- No persistence — every review is stateless
+- Eval numbers are from `gpt-oss-20b`, not the default 120b
 
-Ye distinction khud bolna interviewer pe achha impression daalta hai. "Production-ready"
-bolna aur phir pakde jaana sabse bura outcome hai.
+Saying this distinction out loud lands well. Claiming "production-ready" and then
+being caught is the worst outcome available.
 
 ---
 
-## 4. What the system actually does
+## 5. What the system does
 
 ```
 code / PR diff
    → high-stakes check (auth/DB/exec keywords?) → forced fan-out
-   → warna supervisor LLM routes (bind_tools, temperature 0)
-   → ToolNode parallel execution
-        security_audit  = LLM + Bandit, merged, dedup by line
+   → otherwise the supervisor LLM routes (bind_tools, temperature 0)
+   → ToolNode, parallel execution
+        security_audit    = LLM + Bandit, merged, deduped by line
         performance_audit = Big-O, N+1, leaks, unclosed resources
-   → collect: ok/error envelope unpack, severity sort, risk score
-   → patch: model rewrites file, difflib computes diff
-   → tests (only if Critical/High security): regression test per finding
-   → guardrail: 11 secret patterns + tone, redact not drop
+   → collect: unpack ok/error envelope, sort by severity, score risk
+   → patch: model rewrites the file, difflib computes the diff
+   → tests (only on Critical/High security): one regression test per finding
+   → guardrail: 11 secret patterns + tone, redact rather than drop
    → report + patch + tests + risk + full agent log
 ```
 
 ---
 
-## 5. Architecture
+## 6. Architecture
 
 | Component | Tech | Role |
 |---|---|---|
 | Orchestrator | LangGraph `StateGraph` | supervisor loop, conditional edges, reducers |
-| Router | `llm.bind_tools()` + `ToolNode` | model picks auditors at runtime |
+| Router | `llm.bind_tools()` + `ToolNode` | the model picks auditors at runtime |
 | LLM | Groq `openai/gpt-oss-120b` | tool calling required |
-| Scanner | Bandit (subprocess) | deterministic rules, fused into security audit |
+| Scanner | Bandit (subprocess) | deterministic rules, fused into the security audit |
 | Scoring | `risk.py` | one triage number, corroboration-aware |
 | Safety | custom validators (Guardrails AI optional) | secrets + tone on outbound text |
-| API | FastAPI | `/api/review`, `/api/health`, `/api/graph`, `/webhook/github` |
+| API | FastAPI | review, review-pr, health, graph, webhook |
 | PR bot | PyGithub | HMAC-verified webhook, reviews added lines |
-| UI | React + Vite + Tailwind + Monaco | findings, patch, markdown, agent log |
+| UI | React + Vite + Tailwind + Monaco | findings, patch, tests, agent log |
 
 ---
 
-## 6. Core USPs
+## 7. Core USPs
 
-### 6.1 Tool-calling supervisor — the differentiating piece
+### 7.1 Tool-calling supervisor — the differentiating piece
 
-Poore portfolio me yahi ek jagah hai jahan **LLM khud control flow decide karta hai**
-(baaki projects me LangGraph ke edges decide karte hain).
+This is the one place in the portfolio where **the model decides control flow**
+(the other two projects let LangGraph edges decide).
 
-Naya agent = ek aur `@tool` + clear docstring. Graph topology same. **Docstring hi
-routing logic hai** — aur ye prove hua: performance docstring ko criteria ki tarah
-rewrite karne se recall 33% → 50% gaya, bina koi edge chhue.
+A new agent is one more `@tool` with a clear docstring; the graph topology does not
+change. **The docstring is the routing logic** — demonstrated: rewriting the
+performance tool's docstring as explicit criteria moved its recall from 33% to 50%
+without touching a single edge.
 
-### 6.2 Measured routing, on a held-out set
+### 7.2 Measured routing, on a held-out set
 
-Do labelled sets, do modes. Ye sabse strong number hai jo bol sakte ho:
+Two labelled sets, two modes. This is the strongest number available:
 
 | Set | Mode | Security recall | Performance recall |
 |---|---|---|---|
 | dev (tuned against) | router-only | 90% | 50% |
 | dev (tuned against) | as-shipped | 100% | 67% |
-| **holdout (never tuned)** | router-only | **89%** | 43% |
-| **holdout (never tuned)** | as-shipped | **100%** | 57% |
+| **held-out (never tuned)** | router-only | **89%** | 43% |
+| **held-out (never tuned)** | as-shipped | **100%** | 57% |
 
 *Measured on `openai/gpt-oss-20b`, 20 cases per set.*
 
-Do baatein isme important hain:
+Two things matter here:
 
-- **As-shipped security recall 100% hai us data pe bhi jo kabhi tune nahi hua.**
-  Backstop generalise karta hai.
-- **Dev aur holdout ka gap chhota hai** (90 → 89) — matlab docstring tuning ne
-  overfit nahi kiya. Ye khud check karna hi wo cheez hai jo log nahi karte.
+- **As-shipped security recall is 100% on data never tuned against.** The backstop
+  generalises.
+- **The dev/held-out gap is one point** (90 → 89), so the docstring tuning did not
+  overfit. Checking that is the part people skip.
 
-Exit code threshold se neeche fail karta hai, aur holdout chala ho to gate usi
-ka number padhta hai — kyunki wahi ek number contaminated nahi hai.
+The exit code fails below the threshold, and when the held-out set was run the gate
+reads *its* number — the only one that is not contaminated.
 
-### 6.3 LLM + deterministic scanner fusion
+### 7.3 LLM + deterministic scanner fusion
 
-Scanner apne rules pe miss nahi karta aur hallucinate nahi kar sakta; LLM wo pakadta
-hai jo kisi rule me nahi. `llm+bandit:B608` tag = dono ne independently dekha, aur
-severity escalate hoti hai.
+The scanner cannot miss a pattern it has a rule for and cannot hallucinate one it
+does not; the LLM catches what no rule encodes. An `llm+bandit:B608` tag means both
+engines saw the same line independently, and severity escalates.
 
-### 6.4 Failure is never silence
+### 7.4 Failure is never silence
 
-`failed_audits` / `audit_errors` alag states. Failed audit pe report "incomplete"
-banner deti hai aur risk score `unknown` band, `0/none` nahi.
+`failed_audits` and `audit_errors` are distinct states. A failed audit produces an
+"incomplete review" banner and a risk band of `unknown`, never `0/none`.
 
-### 6.5 Risk score calibrated against a gate
+### 7.5 A risk score calibrated against a gate
 
-Ek Critical → *high* band, do → *critical*, kyunki ek remotely exploitable
-vulnerability merge rokne ke liye kaafi honi chahiye.
+One Critical reaches the *high* band, two reach *critical*, because a single
+remotely exploitable vulnerability has to be enough to stop a merge.
 
-### 6.6 Fail-closed webhook
+### 7.6 Fail-closed webhook
 
-Secret na ho → 503. `hmac.compare_digest`. 202 + background (GitHub 10s pe abandon
-karta hai).
+No secret configured → 503. `hmac.compare_digest`. 202 plus background work,
+because GitHub abandons a delivery after 10 seconds.
 
 ---
 
-## 7. Design trade-offs
+## 8. Design trade-offs
 
-| Faisla | Kya chhoda | Kyun |
+| Decision | Given up | Why |
 |---|---|---|
-| Router, static fan-out nahi | guaranteed coverage | cost + extensibility; backstop se recall bachaya |
-| `difflib` se diff, LLM se nahi | "AI ne diff banaya" | LLM diffs apply hi nahi hote |
-| Bandit fused, standalone nahi | simplicity | ek hi list reviewer padhta hai |
-| Tests generate, execute nahi | "self-healing" claim | sandbox alag project hai |
-| PyGithub, MCP server nahi | "MCP integration" buzzword | MCP ki value model-driven choice me hai; ye calls fixed hain |
-| Custom guardrails, Guardrails AI optional | library ka naam | torch dependency container ko GB me le jaati |
-| Added lines only (PR) | cross-line vulnerabilities | author untouched line pe kuch kar nahi sakta |
+| Router, not static fan-out | guaranteed coverage | cost and extensibility; the backstop protects recall |
+| `difflib` for the diff, not the LLM | "the AI wrote the diff" | LLM-authored diffs routinely fail to apply |
+| Bandit fused, not standalone | simplicity | the reviewer reads one list, not two |
+| Tests generated, not executed | a "self-healing" claim | sandboxing is a separate project |
+| PyGithub, not an MCP server | the "MCP integration" buzzword | MCP's value is model-driven tool choice; these calls are fixed |
+| Custom guardrails, Guardrails AI optional | the library name | the torch dependency takes the container into GB |
+| Added lines only on PRs | cross-line vulnerabilities | the author cannot act on untouched code in this PR |
 
 ---
 
-## 8. Limitations & mitigations
+## 9. Limitations
 
-### L1 — Router ka false negative
+### L1 — Router false negatives
 
-Sabse bada risk. **Mitigation:** temperature 0, criteria-style docstrings,
-`looks_high_stakes` backstop, `force_full_audit` flag, aur recall eval jo gate karta hai.
-**Naapa:** security recall 100% dono modes me.
+The biggest risk. **Mitigations:** temperature 0, criteria-style docstrings, the
+`looks_high_stakes` backstop, the `force_full_audit` flag, and a recall eval that
+gates. **Measured:** as-shipped security recall 100% on both sets.
 
-### L2 — Performance routing weak hai (50%)
+### L2 — Performance routing is weak, and worse held-out
 
-Teen snippets pe model ne performance-only code pe security auditor bulaya.
-**Mitigation:** koi nahi, abhi. **Tolerable kyunki** errors asymmetric hain, aur ab ye
-naapa hua hai.
+50% on the dev set, 43% held-out. Unlike security, nothing backstops it.
+**Tolerable** only because the errors are asymmetric — and it is now measured
+rather than hidden.
 
-### L3 — Bandit sirf Python
+### L3 — Bandit is Python-only
 
-Baaki languages pe security audit akela LLM hai. **Mitigation:** report me `source`
-field dikhta hai, to reviewer ko pata hota hai. Semgrep add karna ek aur `_run_*`
-function hai, aur kuch nahi badalta.
+Elsewhere the security audit is the LLM alone. **Mitigation:** the `source` field
+makes that visible per finding. Semgrep would be one more `_run_*` function.
 
-### L4 — Performance routing kamzor hai, aur holdout pe aur kam
+### L4 — Generated tests are never executed
 
-Dev set pe 50%, holdout pe 43%. Security ke ulta, yahan koi backstop nahi hai
-jo bachaye. **Tolerable kyunki** errors asymmetric hain, aur ab ye naapa hua hai.
+Deliberate. The report says "generated, not executed".
 
-*(Pehle yahan "eval held-out nahi hai" likha tha — wo ab fix ho chuka hai:
-`evals/routing_cases_holdout.py` 20 aise cases hain jinpe kabhi tune nahi kiya.)*
+### L5 — No memory
 
-### L5 — Generated tests kabhi chale nahi
+Every review is stateless. If a developer rejects a suggestion, nothing remembers.
+That is Phase 4, and it needs persistence and embeddings.
 
-Jaan-boojh ke. Report me "generated, not executed" likha hai.
+### L6 — The PR bot has not run against a real repository
 
-### L6 — Koi memory nahi
+Everything up to the GitHub API call is tested; the PyGithub calls are not.
 
-Har review stateless hai. Agar developer suggestion reject kare, system yaad nahi
-rakhta. Phase 4 hai, aur wo vector DB + persistence maangta hai.
+### L7 — Eval numbers are from 20b
 
-### L7 — PR bot asli repo pe verify nahi hua
-
-GitHub API call tak sab tested hai; PyGithub calls khud nahi.
+The 120b daily quota was exhausted the day they were measured. Re-running is
+outstanding.
 
 ---
 
-## 9. How to present it
+## 10. How to present it
 
-**Structure (3 min):**
+**Structure (3 minutes):**
 
-1. **Problem** (20s) — naive "LLM se review karwa lo" kyun kaafi nahi (§2 ki table)
-2. **Architecture** (40s) — supervisor routes, auditors parallel, patch + tests,
-   guardrail
-3. **Live demo** (90s) — §12
-4. **The bug story** (30s) — silent clean pass. Isse close karo, ye yaad rehta hai.
+1. **Problem** (20s) — why "just prompt an LLM" is not enough (the §3 table)
+2. **Architecture** (40s) — supervisor routes, auditors run in parallel, patch and
+   tests, guardrail
+3. **Live demo** (90s) — §13
+4. **The bug story** (30s) — the silent clean pass. Close on this; it is what gets
+   remembered.
 
-**Jo lead karna hai:** *"main tumhe ek bug dikhata hoon jo maine khud is system me
-pakda"* — technical depth ka sabse tez proof.
+**What to lead with:** *"let me show you a bug I caught in my own system"* — the
+fastest proof of technical depth available.
 
 ---
 
-## 10. Anticipated questions
+## 11. Anticipated questions
 
 ### Technical
 
-**Q. "Multi-agent kyun? Ek prompt kaafi nahi tha?"**
-Ek generalist prompt security aur performance dono deeply audit nahi karta. Alag
-personas ke paas focused criteria hote hain. Aur separation se router possible hota
-hai — jo cost bachata hai.
+**Q. Why multi-agent? Wasn't one prompt enough?**
+A generalist prompt cannot deeply audit security and performance at once; separate
+personas carry focused criteria. And the separation is what makes routing possible,
+which is where the cost saving comes from.
 
-**Q. "ReAct-style tool calling banaya hai?"**
-Haan, yahi wo project hai. Aur *kyun sirf yahan* bhi bolo: SQL agent me control flow
-deterministic hona chahiye (DB error decide karta hai, model nahi); yahan model ka
-judgement hi routing signal hai. **Dono pattern jaante ho aur kab kaunsa — yahi asli
-jawab hai.**
+**Q. Have you built ReAct-style tool calling?**
+Yes — this is that project. Also say *why only here*: in the SQL agent the control
+flow should be deterministic (a DB error decides, not the model); here the model's
+judgement *is* the routing signal. **Knowing both patterns and when each applies is
+the real answer.**
 
-**Q. "`create_react_agent` use kyun nahi kiya? Ek line me ho jaata."**
-Wo state transitions chhupa deta. Is project ka reviewable artifact orchestration hi
-hai — usko prebuilt ke peeche chhupana poora point khatam kar deta.
+**Q. Why not `create_react_agent`? It's one line.**
+It hides the state transitions. The orchestration is this project's reviewable
+artifact — hiding it behind a prebuilt defeats the purpose.
 
-**Q. "LLM hallucinate kare to?"**
-`security_audit` ke andar Bandit bhi chalta hai. Scanner apne rules pe miss nahi karta
-aur hallucinate kar hi nahi sakta. Har finding pe `source` hota hai. Jo dono ne di,
-wo `llm+bandit:B608` aur severity escalated.
+**Q. What if the LLM hallucinates?**
+Bandit runs inside `security_audit`. The scanner cannot miss its own rules and
+cannot invent one. Every finding carries a `source`; where both engines agree it
+becomes `llm+bandit:B608` and the severity escalates.
 
-**Q. "Tumhe kaise pata agent actually chala?"**
-(Ye sabse achha sawaal hai — §7 CODE_QA ka pura jawab yahan aata hai.) Short version:
-pata nahi chalta, jab tak "did not run" ko "ran and found nothing" se alag state na
-banao. Aur ye ek asli bug tha.
+**Q. How do you know the agent actually ran?**
+(The best question in the set.) You don't — unless "did not run" is a distinct
+state from "ran and found nothing". And this was a real bug, not a hypothetical.
 
-**Q. "State design aisa kyun?"**
-`messages` reducer ke saath (supervisor loop ko history chahiye), findings alag lists
-(alag consumers), `failed_audits` alag (silent-pass), `risk` ek jagah compute.
+**Q. Why is the state shaped that way?**
+`messages` with a reducer (the supervisor loop needs history), findings in separate
+lists (separate consumers), `failed_audits` separate (the silent-pass rule), `risk`
+computed once so nothing derives its own.
 
-**Q. "Scale kaise karoge? 200-file PR?"**
-Abhi 10 files ka cap hai, additions ke hisaab se ranked. Aage: per-file parallelism,
-aur file-level caching by content hash — same file dobara PR me aaye to re-review na ho.
+**Q. How would you scale to a 200-file PR?**
+Today there is a 10-file cap, ranked by additions. Next: per-file parallelism under
+a concurrency limit, and caching by content hash so an unchanged file is not
+re-reviewed.
 
-**Q. "Cost kya hai per review?"**
-Naapa nahi hai, aur isliye **number nahi bolunga**. Jo structurally pata hai: router
-ek chhota call hai, auditors bade; CSS pe zero auditor calls hoti hain. Cost dashboard
-roadmap me hai.
+**Q. What does a review cost?**
+It has not been measured, so **I will not quote a number**. Structurally: the router
+is a small call, the auditors are large ones, and a CSS file triggers zero auditor
+calls. Cost tracking is on the roadmap.
 
 ### Product
 
-**Q. "Ye CodeRabbit/Snyk se better kaise hai?"**
-Better nahi — ye unke architecture ka ek imaandaar demonstration hai. Jo differentiator
-dikhane layak hai: routing ka cost control, LLM+scanner fusion with provenance, aur
-failure ko silence se alag rakhna. Ye teeno commercial tools me aksar transparent nahi
-hote.
+**Q. How is this better than CodeRabbit or Snyk?**
+It is not — it is an honest demonstration of the same architecture. What is worth
+showing: routing for cost control, LLM+scanner fusion with provenance, and keeping
+failure distinct from silence. Commercial tools are often opaque about all three.
 
-**Q. "Team isko trust kyun karegi?"**
-Teen wajah: har finding pe source dikhta hai; incomplete review khud ko incomplete
-bolti hai; aur risk score calibrated hai, isliye gate predictable hai.
+**Q. Why would a team trust it?**
+Every finding shows its source; an incomplete review says so itself; and the risk
+score is calibrated, so the gate behaves predictably.
 
 ---
 
-## 11. Positioning alongside the other projects
+## 12. Positioning alongside the other projects
 
-Teen projects hain: **Adaptive CRAG**, **Self-Healing SQL Agent**, **Code Guardian**.
+Three projects: **Adaptive CRAG**, **Self-Healing SQL Agent**, **Code Guardian**.
 
-### "Ye teeno ek hi project nahi hain?"
+### "Aren't these the same project three times?"
 
-Nahi, aur farak **control flow kaun decide karta hai** pe hai:
+No, and the difference is **who decides control flow**:
 
-| Project | Control flow kaun decide karta hai | Kyun |
+| Project | Who decides | Why |
 |---|---|---|
-| Adaptive CRAG | LangGraph edges, ek LLM grader ke verdict pe | grading judgement hai, routing deterministic |
-| Self-Healing SQL | DB ka error message | error deterministic signal hai, model ka opinion nahi chahiye |
-| **Code Guardian** | **LLM khud, tool calling se** | "is diff pe kaunsa audit worth hai" judgement hai |
+| Adaptive CRAG | LangGraph edges, on an LLM grader's verdict | grading is judgement; routing is deterministic |
+| Self-Healing SQL | the database's error message | the error is a deterministic signal; no model opinion needed |
+| **Code Guardian** | **the model, via tool calling** | "which audit is this diff worth" is judgement |
 
-Yahi teeno ko ek saath strong banata hai: **tum jaante ho kab model ko control dena
-hai aur kab nahi.** Ye ek pattern ko teen baar dohrana nahi hai.
+That is what makes the three strong together: **you know when to hand the model
+control and when not to.** It is not one pattern repeated three times.
 
-### Kisse lead karna hai
+### Which to lead with
 
-- **Agentic/LLM-orchestration role** → Code Guardian (tool calling + eval)
+- **Agentic / LLM-orchestration role** → Code Guardian (tool calling + eval)
 - **RAG role** → Adaptive CRAG
-- **Data/backend role** → Self-Healing SQL
+- **Data / backend role** → Self-Healing SQL
 
 ---
 
-## 12. Demo strategy
+## 13. Demo script
 
-Teen scenario, isi order me. Poora ~2 minute.
+Three scenarios, in this order, about two minutes total.
 
 ### Scenario 1 — Vulnerable Python (the money shot)
 
-Dropdown se "Vulnerable Python" → Review.
+Load the sample, hit Review.
 
-Dikhane layak:
-- **Risk 100/100 critical** — banner sabse upar
-- **3 findings pe `confirmed` badge** — dono engines
-- **2 SQLi sites jo sirf Bandit ne pakde**
-- Patch tab → unified diff
-- **Agent log tab** → "routing bypassed — high-stakes heuristic"
+Show:
+- **Risk 100/100 critical** in the run strip
+- **3 findings marked `confirmed`** — both engines, independently
+- **2 SQLi sites only Bandit caught**
+- Patch tab → side-by-side original vs patched
+- **Agent log** → "routing bypassed — high-stakes heuristic"
 
 ### Scenario 2 — Plain CSS (the architecture shot)
 
-Same flow, CSS sample.
+Same flow, CSS sample. **~0.9s versus ~11.4s**, and the run strip shows both
+auditors as *skipped*.
 
-**~0.9s vs ~11.4s.** Dono sections "not run" dikhte hain.
+> *"The router decided a CSS file has no security surface. A static fan-out would
+> have paid full price here too."*
 
-> *"Router ne decide kiya ki CSS pe security surface hai hi nahi. Static fan-out
-> yahan bhi poora paisa kharch karta."*
+The contrast lands harder than any explanation.
 
-Ye contrast bolne se zyada asar karta hai.
+### Scenario 3 — The failure (if there is time)
 
-### Scenario 3 — The failure (if time)
+Set `GUARDIAN_MODEL` to a nonsense id and re-run.
 
-`GUARDIAN_MODEL` ko bakwaas id pe set karke re-run.
+> *"This is the bug I caught. It used to report '0 findings' on code with a
+> Critical SQL injection. Now the whole review is marked incomplete."*
 
-> *"Ye wo bug tha jo maine pakda. Pehle ye '0 findings' bolta tha — us code pe jisme
-> Critical SQL injection tha. Ab poora review incomplete mark hota hai."*
-
-**Demo se pehle:**
+**Before demoing:**
 ```bash
 curl https://api.groq.com/openai/v1/models -H "Authorization: Bearer $GROQ_API_KEY"
 ```
-Groq model ids retire karta rehta hai. Ek baar phas chuke ho.
+Groq retires model ids, and the free tier is 200k tokens/day per model. Do not burn
+the quota the day before.
 
 ---
 
-## 13. Resume one-liner
+## 14. Resume line
 
-> **Code Guardian** — Multi-agent code reviewer (LangGraph + Groq) jisme ek LLM
-> supervisor `bind_tools` se runtime pe specialist auditors choose karta hai; Bandit
-> static analysis LLM findings ke saath fused with provenance tagging; risk scoring,
-> autonomous patch + regression-test generation, aur HMAC-verified GitHub PR bot.
-> Routing quality 20 labelled cases pe naapi gayi — **security recall 100%**.
+> **Code Guardian** — Multi-agent code reviewer (LangGraph + Groq) where an LLM
+> supervisor selects specialist auditors at runtime via `bind_tools`; Bandit static
+> analysis fused with LLM findings under provenance tagging; risk scoring,
+> autonomous patch and regression-test generation, and an HMAC-verified GitHub PR
+> bot. Routing quality measured on a **held-out** set — 100% security recall.
 
 ---
 
-## 14. Honesty checklist — what NOT to claim
+## 15. Honesty checklist — what NOT to claim
 
-| ❌ Mat bolo | ✅ Bolo |
+| ❌ Don't say | ✅ Say |
 |---|---|
-| "Guardrails AI use kiya" | "Custom validators; Guardrails AI optional hai, aur engine report me naam aata hai" |
-| "MCP integration hai" | "PyGithub hai. Model-driven tool calling supervisor me hai" |
-| "Self-healing hai" | "Tests generate hote hain, execute nahi — sandbox alag project hai" |
-| "Production me chal raha hai" | "Working system hai; PR bot asli repo pe verify nahi hua" |
-| "Router 100% accurate hai" | "As-shipped security recall 100% on a held-out set of 20; router-only 89%. Performance routing 43% — wahi weak spot hai" |
-| "Performance audit strong hai" | "Routing recall 50% — yahi weak spot hai" |
-| "Cost X% kam karta hai" | "CSS pe 0.9s vs 11.4s; per-review cost naapa nahi" |
+| "I used Guardrails AI" | "Custom validators; Guardrails AI is optional, and the report names which engine ran" |
+| "It has MCP integration" | "It's PyGithub. The model-driven tool calling is in the supervisor" |
+| "It's self-healing" | "Tests are generated, not executed — sandboxing is a separate project" |
+| "It runs in production" | "It's a working system; the PR bot has not been verified against a real repo" |
+| "The router is 100% accurate" | "As-shipped security recall is 100% on a held-out set of 20; router-only is 89%. Performance routing is 43% — that's the weak spot" |
+| "Performance auditing is strong" | "Routing recall 43% held-out — the known weakness" |
+| "It cuts cost by X%" | "CSS 0.9s versus 11.4s; per-review cost is not measured" |
 
-**Usool:** jo naapa nahi gaya, wo number nahi banta.
+**The rule: anything not measured does not become a number.**
 
 ---
 
-## 15. An honest assessment
+## 16. An honest assessment
 
-### Iski strength architecture nahi hai
+### The strength is not the architecture
 
-Supervisor pattern, LangGraph, tool calling — ye sab documented patterns hain. Koi
-interviewer inse impress nahi hoga.
+Supervisor pattern, LangGraph, tool calling — all documented patterns. No
+interviewer is impressed by them.
 
-**Iski strength ye hai ki system apne failure modes ke baare me imaandaar hai**, aur
-wo imaandaari code me enforced hai:
+**The strength is that the system is honest about its own failure modes, and that
+honesty is enforced in code:**
 
-- Ek failed audit *chup* nahi reh sakta — schema level pe
-- Ek incomplete review *safe* nahi dikh sakta — risk score level pe
-- Ek finding ka source *chhupaya* nahi ja sakta — `Finding` schema level pe
-- Router ki quality *claim* nahi ki ja sakti — eval gate karta hai
+- A failed audit *cannot* stay silent — enforced at schema level
+- An incomplete review *cannot* look safe — enforced in the risk score
+- A finding's source *cannot* be hidden — enforced in the `Finding` schema
+- Routing quality *cannot* be merely claimed — the eval gates it, on a held-out set
 
-Ye engineering judgement hai, library knowledge nahi. Aur yahi wo cheez hai jo
-portfolio projects me aksar nahi hoti.
+That is engineering judgement rather than library knowledge, and it is the part
+portfolio projects usually lack.
 
-### Weaknesses — poochhe jaane se pehle jaan lo
+### Weaknesses — know these before you are asked
 
-1. **Performance routing kamzor hai** — dev 50%, holdout 43%.
-2. **Performance routing 50%** hai.
-3. **Bandit sirf Python** — multi-language claim kamzor hai.
-4. **PR bot live verify nahi hua.**
-5. **Koi persistence/memory nahi** — har review stateless.
-6. **20 cases chhota sample hai** — 100% ka interval chauda hai.
+1. **Performance routing is weak** — 50% dev, 43% held-out, and unbackstopped.
+2. **Bandit is Python-only**, so the multi-language claim is thin.
+3. **The PR bot is unverified against a real repository.**
+4. **No persistence or memory** — every review is stateless.
+5. **20 cases per set is small** — the interval around 100% is wide.
+6. **Eval numbers are from 20b**, not the default 120b.
 
-Inme se har ek pe tumhare paas ya mitigation hai ya "jaan-boojh ke deferred" ka reason.
-Jo nahi hai, wo maan lo — wahi sabse achha jawab hai.
+For each of these you have either a mitigation or a deliberate-deferral reason.
+Where you have neither, concede it — that is the best available answer.

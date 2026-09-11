@@ -1,21 +1,16 @@
 """Supervisor — an LLM tool-calling router, not a fixed fan-out.
 
-See docs/TECHNICAL_SPEC.md §3a for the design argument. In short: the
-specialists are exposed to the model as tools, and the model decides at runtime
-which audits a given input actually needs. The tool docstrings *are* the
-routing criteria, so adding a Phase 3 agent means writing one more ``@tool`` —
-no edge rewiring.
+The specialists are exposed as tools and the model picks at runtime, so the tool
+docstrings *are* the routing criteria and a new agent is one more ``@tool`` with
+no edge rewiring. Design argument: docs/TECHNICAL_SPEC.md §3a.
 
-The known failure mode is a false negative: skipping the security audit on code
-that did have a vulnerability. Three mitigations live here:
+The failure mode that matters is a false negative — skipping the security audit
+on code that did have a vulnerability. Three mitigations live here:
 
-1. ``temperature=0`` (see :mod:`app.config`) and docstrings written as routing
-   criteria rather than prose descriptions.
-2. ``force_full_audit`` — a caller-supplied override that bypasses routing
-   entirely for high-stakes paths (anything touching auth or database code).
-3. ``looks_high_stakes`` — a cheap static backstop that flips the override on
-   when the input obviously touches an auth or DB surface, so the recall risk
-   does not depend solely on the caller remembering to set the flag.
+1. ``temperature=0`` and docstrings written as criteria, not descriptions.
+2. ``force_full_audit`` — caller-side override for high-stakes paths.
+3. ``looks_high_stakes`` — a static backstop, so recall does not depend on the
+   caller remembering to set that flag.
 """
 
 from __future__ import annotations

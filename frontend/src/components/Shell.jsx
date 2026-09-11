@@ -3,7 +3,7 @@ import { Icon } from './Icons'
 const NAV = [
   { id: 'review', label: 'Review', icon: Icon.review },
   { id: 'pulls', label: 'Pull Requests', icon: Icon.pr },
-  { id: 'analytics', label: 'History', icon: Icon.chart },
+  { id: 'history', label: 'History', icon: Icon.chart },
   { id: 'agents', label: 'Agents', icon: Icon.agents },
   { id: 'settings', label: 'Settings', icon: Icon.settings },
 ]

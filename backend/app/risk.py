@@ -3,21 +3,15 @@
 Roadmap item 2c (docs/TECHNICAL_SPEC.md §7). No new dependency: the inputs are
 findings the graph already has and the size of the reviewed code.
 
-Three properties this scoring has to hold, in order of importance:
+Three properties, in order of importance:
 
-1. **An incomplete review can never look safe.** If an audit failed, the finding
-   list is not evidence of anything, and a score computed from it would say
-   "3/100, ship it" about code nothing examined. The score is therefore marked
-   ``incomplete`` and carries no band — the same rule that governs the report
-   (see :func:`app.graph.collect_node`). This is the single most important line
-   in the module.
-2. **Findings dominate; size only modulates.** A large diff is harder to review
-   and so slightly riskier, but a 2000-line diff with nothing wrong in it is not
-   more dangerous than a 5-line diff with a SQL injection. Size is capped at a
-   +25% modifier so it can never manufacture risk on its own.
-3. **Corroboration counts.** A finding both the LLM and the static analyser
-   flagged independently is far less likely to be a hallucination, so it is
-   weighted higher than either engine alone.
+1. **An incomplete review can never look safe.** A score built from a failed
+   audit's (empty) findings would read "3/100, ship it" about code nothing
+   examined, so it is marked incomplete and carries no band.
+2. **Findings dominate; size only modulates** (+25% cap), because a 2000-line
+   clean diff is not riskier than a 5-line SQL injection.
+3. **Corroboration counts** — a finding both engines flagged independently is
+   less likely to be a hallucination.
 """
 
 from __future__ import annotations

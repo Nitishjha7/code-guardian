@@ -1,23 +1,16 @@
 """Deterministic static analysis, fused into the security audit.
 
-Per docs/TECHNICAL_SPEC.md §7: this turns "an LLM that might miss things" into
-"an LLM plus a scanner that cannot miss its own rules". The two are
-complementary, and the difference is worth stating precisely:
+Neither engine subsumes the other, which is the whole argument (spec §7):
 
 * Bandit cannot miss a pattern it has a rule for, and cannot hallucinate one it
-  does not. Its recall on its own rule set is 100% and its false-positive rate
-  is a known, fixed property of those rules.
-* The LLM catches what no rule encodes - a missing authorization check, a
-  business-logic flaw, an insecure design - and explains *why* in context.
+  does not.
+* The LLM catches what no rule encodes - missing authorization, business-logic
+  flaws - and explains why in context.
 
-Neither subsumes the other, so findings from both are merged into one
-``Finding`` list and tagged with ``source`` so a reviewer can tell which engine
-produced a given line.
+So both run and their findings merge into one list, tagged with ``source``.
 
-Bandit is Python-only. For other languages this module is a no-op and the audit
-is the LLM's alone - stated in the report rather than silently implied. Adding
-Semgrep later means writing one more ``_run_*`` function with the same shape;
-nothing else changes.
+Bandit is Python-only; elsewhere this is a no-op and the report says so. Semgrep
+would be one more ``_run_*`` function of the same shape.
 """
 
 from __future__ import annotations

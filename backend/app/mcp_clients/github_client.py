@@ -1,17 +1,11 @@
 """GitHub tooling layer for the PR bot.
 
-Naming note, stated plainly: the spec calls this the "MCP client" layer and
-lists *GitHub MCP Server / PyGithub* as alternatives. This module uses
-**PyGithub**, not an MCP server. Running the official GitHub MCP server would
-mean shipping a second process (a Node container) purely to wrap REST calls this
-backend already makes directly, and MCP's value - letting a *model* discover and
-call tools at runtime - does not apply here: the PR bot's GitHub calls are fixed
-and deterministic, driven by webhook events rather than by model choice. The
-model-driven tool calling in this project lives in the supervisor, where it
-actually earns its keep.
+The folder is named ``mcp_clients`` because the spec said so, but **this is
+PyGithub, not an MCP server**. MCP's value is letting a *model* discover and call
+tools at runtime; these calls are fixed and webhook-driven, so the server would
+be a second container wrapping REST calls this backend already makes.
 
-If you say "MCP" about this project in an interview, say it about
-``app/agents/supervisor.py``, not about this file.
+The model-driven tool calling in this project lives in ``agents/supervisor.py``.
 """
 
 from __future__ import annotations

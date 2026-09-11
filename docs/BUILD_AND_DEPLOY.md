@@ -1,165 +1,195 @@
-# Build & Deploy Guide (Interview Project Focus)
+# Build & Deploy Guide
 
-Is document ka goal: Code Guardian ko interview-showcase project ke liye kaise banao (priorities), aur end me kaise deploy karo.
+What to prioritise when building this as an interview showcase, and how to
+deploy it. The interview *answers* live in [INTERVIEW_NOTES.md](INTERVIEW_NOTES.md);
+this doc is about build order and deployment.
 
 ## Purpose
 
-Main purpose: **interview me project dikhana**. Isliye depth + explainability zyada matter karti hai, breadth kam. Poora Phase 3-5 banane ki zaroorat nahi — sirf roadmap me likhe rehne se bhi kaam ban jaata hai.
+The goal is to **show the project in an interview**, so depth and explainability
+matter more than breadth. Phases 3–5 do not need building — having them written
+down as a considered roadmap does the job.
 
-## Kya banana hai (Priority Order)
+## What to build, in priority order
 
-### 1. Core (zaroor banao, well-polished)
+### 1. Core — build these, well
 
-- **LangGraph multi-agent graph** — Security Agent + Performance Agent + Patch Generator, properly connected via `StateGraph`. Ye interview ka sabse important part hai.
-- **Tool-calling supervisor** — Supervisor ko fixed fan-out mat banao. Specialists ko `@tool` banao, `llm.bind_tools([...])` se supervisor ko bind karo, phir `ToolNode` + conditional edge se loop. **Ye is project ka sabse differentiating piece hai** — poore portfolio me yahi ek jagah hai jahan **LLM khud** control flow decide karta hai (baaki dono projects me LangGraph ke edges decide karte hain). "ReAct-style / tool calling banaya hai?" agentic AI interview ka common sawaal hai — iske bina jawab "nahi" hota hai. Detail + defence [TECHNICAL_SPEC.md §3a](TECHNICAL_SPEC.md) me hai.
-- **FastAPI backend** — `/api/review` endpoint jo code accept kare aur graph trigger kare.
-- **React UI** — simple code textarea/Monaco editor + "Review" button + result cards (security issues, performance issues, patch diff).
-- **Guardrails AI integration** — output diffs/comments me secrets leak na ho, ye validate karo. Interview me "production-thinking" dikhata hai.
-- **Clean architecture** — state schema (`ReviewerState`), node separation, docs (already ready in [SETUP.md](SETUP.md) & [TECHNICAL_SPEC.md](TECHNICAL_SPEC.md)).
+- **LangGraph multi-agent graph** — Security, Performance and Patch Generator
+  wired through `StateGraph`. The most important part.
+- **Tool-calling supervisor** — do not make it a fixed fan-out. Expose the
+  specialists as `@tool`, bind with `llm.bind_tools([...])`, loop via `ToolNode`
+  and a conditional edge. **This is the differentiating piece**: it is the one
+  place in the portfolio where the *model* decides control flow (the other two
+  projects let LangGraph edges decide). "Have you built ReAct-style tool
+  calling?" is a common agentic-AI question, and without this the answer is no.
+  Defence in [TECHNICAL_SPEC §3a](TECHNICAL_SPEC.md).
+- **FastAPI backend** — `/api/review` accepting code and driving the graph.
+- **React UI** — editor, Review button, result cards.
+- **Output guardrails** — validate that diffs and comments leak no secrets.
+  Shows production thinking.
+- **Clean architecture** — a real state schema, separated nodes, and docs.
 
-### 2. Nice-to-have (ban gaya)
+### 2. Nice-to-have — built
 
-- **GitHub PR Bot (Phase 2)** — ✅ bana hua hai. Webhook listener PR open/update pe trigger hota hai, GitHub API se diff fetch karta hai, aur review comment post karta hai. Ye strong differentiator hai — "real automation", sirf toy demo nahi. Setup steps [README](../README.md#github-pr-bot-phase-2) me hain.
+- **GitHub PR Bot (Phase 2)** ✅ — a webhook listener that triggers on PR
+  open/update, fetches the diff, and posts a review comment. A strong
+  differentiator: real automation rather than a toy demo. Setup in the
+  [README](../README.md#github-pr-bot-phase-2).
 
-### 3. Skip for now (sirf README/roadmap me likho)
+### 3. Skip — leave in the roadmap
 
-- Phase 3 (Code Quality, Test Coverage, Dependency/License, Documentation agents)
-- Phase 4 (Feedback loop, vector DB memory, team-specific rules)
-- Phase 5 (CI/CD auto-block, Slack/Discord alerts, auto-ticketing)
+- Phase 3 (Code Quality, Dependency/License, Documentation agents)
+- Phase 4 (feedback loop, vector-DB memory, team-specific rules)
+- Phase 5 (CI/CD auto-block, chat alerts, auto-ticketing)
 
-Ye sab already [TECHNICAL_SPEC.md](TECHNICAL_SPEC.md) ke "Future Phases" section me likhe hain — interviewer ko dikhega ki tumne aage ki soch rakhi hai, bina actually banaye.
+These are written up in [ROADMAP.md](ROADMAP.md) with the reason each is
+deferred. An interviewer sees that you thought ahead without burning weeks.
 
-## Interview me kaise present karo
+## Before you demo: Groq retires model ids
 
-- **"Kyun multi-agent (single LLM prompt kyun nahi)?"** — specialization/accuracy ka reasoning ready rakho: ek generalist prompt security aur performance dono deeply audit nahi kar pata, alag agents zyada focused/accurate hote hain.
-- **"Supervisor har baar dono agents chalata hai?"** — Nahi. Supervisor ek tool-calling LLM hai; wo decide karta hai kis diff ko kaunsa audit chahiye. Pure CSS diff pe security surface hai hi nahi, config change me algorithmic complexity nahi hoti — static fan-out har submission pe poora cost deta hai. Aur naye agents add karna sirf ek naya `@tool` likhna hai, edges rewire karna nahi.
-- **"Router galat decide kare toh?"** — Ye khud se bolo, ye maturity dikhata hai: false negative (security audit skip ho gaya jabki vulnerability thi) wasted tokens se kahin bura hai. Teen mitigation: `temperature=0` + docstrings ko routing *criteria* ki tarah likhna, high-stakes paths (auth/DB touch karne wale diffs) pe forced-fan-out override flag, aur labelled snippets ka eval set jo **recall** measure kare. **Ye teeno actually bane hue hain** — eval `backend/evals/` me hai, aur measured number bhi hai: security recall **100%** (0 false negatives), performance recall 50%. Number bolna hi is answer ko strong banata hai; "hum measure karte hain" bolna kaafi nahi.
-- **"ReAct-style tool calling banaya hai?"** — Haan, yahi wo project hai. Aur ye bhi bolo ki *kyun* sirf yahan: SQL agent me control flow deterministic hona chahiye (DB error se decide hota hai, model se nahi), yahan model ka judgement hi routing signal hai. Dono pattern jaante ho, aur kab kaunsa use karna hai wo bhi — yahi asli answer hai.
-- Ek tricky design decision explain karne ke liye ready raho — jaise Guardrails kyun use kiya (secrets leak prevent karna), ya LangGraph state design kyun aisa rakha.
-- **Live demo ready rakho**: vulnerable code paste karo (e.g. SQL injection wala snippet) → dikhao Security Agent flag karta hai → Patch Generator fix suggest karta hai. Phir CSS sample chalao — router dono auditors skip kar deta hai, ~0.9s vs ~11.4s. Ye contrast hi §3a ka poora argument hai, bolne se zyada asar karta hai.
-- **"LLM hallucinate kare ya miss kar de toh?"** — ye sabse aam sawaal hai AI review tools pe, aur iska jawab architecture me hai: `security_audit` ke andar **Bandit bhi chalta hai** aur dono ke findings merge hote hain. Scanner apne rule set pe kabhi miss nahi karta aur hallucinate kar hi nahi sakta; LLM wo pakadta hai jo kisi rule me likha hi nahi hai (missing authorization, business-logic flaw) aur context ke saath samjhata hai. Koi bhi engine dusre ko replace nahi karta. Demo pe number bhi hai: 8 raw findings → 5 dedup ke baad, **3 dono engines ne independently confirm kiye**, aur Bandit ne 2 SQLi sites pakde jo LLM se chhoot gaye the. Jab dono agree karte hain toh severity escalate hoti hai — MD5 wala finding LLM ne *High* kaha tha, Bandit ke confirm karne pe *Critical* ho gaya.
-- **"Agent fail ho jaye toh pata kaise chalega?"** — ye sawaal aa sakta hai, aur iska jawab tumhare paas actually code me hai: "did not run" aur "ran and found nothing" alag states hain (`failed_audits`), aur failed audit kabhi "No issues found" print nahi karta. Neeche implementation notes me detail hai.
-
-### Groq model ids die — check before you demo
-
-`llama-3.3-70b-versatile` (jo original spec me likha tha) ab Groq pe exist nahi karta; 404 deta hai. Demo se pehle ye chala lo:
+`llama-3.3-70b-versatile` (in the original spec) no longer exists on Groq — it
+404s. Check first:
 
 ```bash
 curl https://api.groq.com/openai/v1/models -H "Authorization: Bearer $GROQ_API_KEY"
 ```
 
-Jo id mile wahi `GUARDIAN_MODEL` me daalo. Abhi default `openai/gpt-oss-120b` hai (tool calling support karta hai, zaroori hai — supervisor isi pe chalta hai).
+Put a working id in `GUARDIAN_MODEL`. The default is `openai/gpt-oss-120b`, and
+**it must support tool calling** — the supervisor depends on it.
 
-## Build Order (status)
+Also watch the daily token quota. The free tier is 200k tokens/day *per model*;
+heavy testing the day before a demo will exhaust it. Switching to
+`openai/gpt-oss-20b` gets you a separate bucket.
 
-1. ✅ `backend/app/graph.py` — LangGraph StateGraph + `ReviewerState` (in `state.py`)
-2. ✅ `backend/app/agents/security_agent.py` + `performance_agent.py` — LLM calls with focused prompts
-3. ✅ `backend/app/agents/patch_generator.py` — synthesize both findings into a diff
-4. ✅ `backend/app/guardrails_config/` — secrets + tone guard on final output
-5. ✅ FastAPI `/api/review` endpoint wiring the graph (`backend/app/main.py`)
-6. ✅ React frontend — Monaco input + findings / patch / markdown / agent-log tabs
-7. ✅ (Bonus) GitHub PR bot — `/webhook/github` with HMAC auth, `app/mcp_clients/github_client.py`, `app/pr_bot.py`
+## Build order (status)
 
-### Implementation notes worth knowing before the interview
+1. ✅ `backend/app/graph.py` — `StateGraph` + `ReviewerState` (in `state.py`)
+2. ✅ `agents/security_agent.py` + `performance_agent.py` — focused prompts
+3. ✅ `agents/patch_generator.py` — synthesize findings into a diff
+4. ✅ `guardrails_config/` — secrets + tone guard on all outbound text
+5. ✅ FastAPI `/api/review` wiring the graph (`app/main.py`)
+6. ✅ React frontend — editor, findings, patch, tests, agent log
+7. ✅ GitHub PR bot — `/webhook/github` with HMAC auth, `pr_bot.py`
+8. ✅ Bandit fusion, risk score, test generation, held-out routing eval
 
-Five places where the code deliberately departs from the naive reading of the
-spec. Each is a decision you should be able to defend, not an accident:
+## Implementation notes worth knowing before the interview
 
-- **A failed audit is never rendered as "no issues found".** This one is worth
-  leading with, because it was a real bug caught during testing. The audits are
-  tools, and LangGraph's `ToolNode` turns an uncaught exception into a plain
-  ToolMessage — so when the Groq model id was retired and every audit 404'd, the
-  system happily reported **0 findings on code with a Critical SQL injection**.
-  For an auditing tool that is the worst possible failure: silence is
-  indistinguishable from a pass. Fixed by having each tool return a
-  `{"ok": bool, ...}` envelope, tracking `failed_audits` / `audit_errors` in
-  state, and refusing to print "No issues found" for an audit that never ran —
-  the report leads with an "incomplete review" banner instead. Four tests pin
-  this behaviour down. Good interview answer to *"how do you know your agent
-  actually worked?"*: you don't, unless you make "did not run" a distinct state
-  from "ran and found nothing."
+Six places where the code deliberately departs from the naive reading of the
+spec. Each is a decision to defend, not an accident.
+
+- **A failed audit is never rendered as "no issues found".** Lead with this; it
+  was a real bug. The audits are tools, and LangGraph's `ToolNode` turns an
+  uncaught exception into a plain ToolMessage — so when the Groq model id was
+  retired and every audit 404'd, the system reported **0 findings on code with a
+  Critical SQL injection**. For an auditing tool that is the worst possible
+  failure: silence became indistinguishable from a pass. Fixed with a
+  `{"ok": bool, ...}` envelope per tool, `failed_audits` / `audit_errors` in
+  state, and a report that leads with an "incomplete review" banner. Four tests
+  pin it down. Good answer to *"how do you know your agent actually worked?"* —
+  you don't, unless "did not run" is a distinct state from "ran and found
+  nothing".
 
 - **The diff is computed with `difflib`, not asked for from the LLM.** Models
-  emit unified diffs with wrong hunk headers and line counts constantly, and
-  such a patch will not apply. The model is asked only for the rewritten file;
-  the diff is derived from the two texts, which is exact by construction.
-- **Guardrails AI is an optional dependency; a local pattern scanner is the
-  default.** Some `guardrails-ai` hub validators pull a full torch install — a
-  bad trade for a container that otherwise fits in a few hundred MB. The
-  fallback is written as a real guard (11 secret patterns, placeholder-aware so
-  it does not flag the `os.environ[...]` the patch agent is *supposed* to emit),
-  and `guardrail_report.engine` always names which engine produced the result.
-  Do not claim "Guardrails AI" in an interview without saying this.
-- **The "MCP client" layer uses PyGithub, not an MCP server.** The spec listed
-  both as options and the folder is still called `mcp_clients/`. Running the
-  official GitHub MCP server would mean shipping a second (Node) container purely
-  to wrap REST calls this backend already makes, and MCP's actual value — letting
-  a *model* discover and call tools at runtime — does not apply: the PR bot's
-  GitHub calls are fixed and webhook-driven, not model-chosen. **So if you say
-  "MCP" in an interview, say it about `supervisor.py`, not about this file** —
-  that is where model-driven tool calling actually happens. Claiming an MCP
-  integration you did not build is the one thing that will sink you here.
-- **The router has a static backstop.** `looks_high_stakes()` in
-  `supervisor.py` force-runs both auditors when the input obviously touches an
-  auth, DB or exec surface, so the recall risk from §3a does not depend on the
-  caller remembering to set `force_full_audit`. Deliberately over-inclusive: a
-  false positive costs one extra audit, a false negative costs a vulnerability.
+  emit unified diffs with wrong hunk headers and line counts, and such a patch
+  will not apply. The model returns the rewritten file; the diff is derived from
+  the two texts, exact by construction.
 
-### What is tested
+- **Guardrails AI is optional; a local pattern scanner is the default.** Some
+  `guardrails-ai` hub validators pull a full torch install — a bad trade for a
+  container that otherwise fits in a few hundred MB. The fallback is a real
+  guard (11 secret patterns, placeholder-aware so it does not flag the
+  `os.environ[...]` a fix is *supposed* to emit), and `guardrail_report.engine`
+  always names which engine ran. **Do not claim "Guardrails AI" without saying
+  this.**
+
+- **The "MCP client" layer is PyGithub, not an MCP server.** The folder is named
+  `mcp_clients/` because the spec said so. Running the MCP server would mean a
+  second container wrapping REST calls this backend already makes, and MCP's
+  value — a *model* discovering and calling tools at runtime — does not apply to
+  fixed, webhook-driven calls. **If you say "MCP", say it about
+  `supervisor.py`.** Claiming an integration you did not build is the one thing
+  that will sink you here.
+
+- **The router has a static backstop.** `looks_high_stakes()` force-runs both
+  auditors when the input obviously touches auth, DB or exec surfaces, so recall
+  does not depend on the caller setting `force_full_audit`. Deliberately
+  over-inclusive: a false positive costs one audit, a false negative costs a
+  vulnerability.
+
+- **Test generation never executes.** Running LLM-authored tests safely needs a
+  sandbox; the report says "generated, not executed".
+
+## What is tested
 
 `backend/tests/` covers the LLM-free seams — JSON recovery from messy model
-output, diff generation, the conditional-edge routing predicate, the state
-collector (including failed and malformed audits), every guardrail pattern, and
-the whole Phase 2 surface: HMAC signature verification, webhook event filtering,
-file-type selection, and added-line extraction from a diff.
+output, diff generation, the routing predicate, the state collector (including
+failed and malformed audits), every guardrail pattern, and the whole Phase 2
+surface: HMAC verification, event filtering, file selection, PR-link parsing and
+added-line extraction.
 
-**99 tests, no API key needed.** Not covered by the unit tests: the agent
-prompts themselves and the PyGithub calls (need a token and a live PR).
+**99 tests, no API key needed.** Not covered: the agent prompts themselves, and
+the PyGithub calls (they need a token and a live PR).
 
-The routing decision *is* measured, separately, by `backend/evals/` - 20 labelled
-snippets scoring recall and precision per auditor. Security recall is **100%**
-(0 false negatives); performance recall is 50%, which is the honest weak spot.
-Details and the caveat (the set was tuned against, so it is not held out) are in
-the README.
+Routing quality is measured separately by `backend/evals/` — two sets of 20, one
+tuned against and one held out. As-shipped security recall is **100% on the
+held-out set**; router-only is 89%. Performance routing is the weak spot at 43%.
+Details and caveats in the [README](../README.md).
 
 ---
 
 ## Deployment
 
-### Where to deploy
+### Where
 
 | Part | Platform | Why |
 |---|---|---|
-| Backend (FastAPI + Docker) | **Railway** or **Render** | Docker Compose deploys directly, free tier available |
-| Frontend (React) | **Cloudflare Pages** or **Vercel** | Static build, free tier, fast global CDN |
+| Backend (FastAPI + Docker) | **Render** or **Railway** | deploys the Dockerfile directly, free tier |
+| Frontend (React) | **Cloudflare Pages** or **Vercel** | static build, free tier, global CDN |
 
-**Cloudflare Workers backend ke liye nahi chalega** — Python/FastAPI aur long-running webhook process Workers runtime ke liye fit nahi hai. Cloudflare sirf frontend (Pages) ke liye use karo.
+**Cloudflare Workers will not work for the backend** — Python/FastAPI and a
+long-running webhook process do not fit that runtime. Use Cloudflare for the
+frontend only.
 
-### Steps — Backend (Render example)
+Hugging Face Spaces is a viable single-container alternative (Docker SDK, free,
+secrets in Settings), with two caveats: free Spaces sleep after inactivity, and a
+public Space exposes `/api/review` to anyone, which spends your Groq quota.
 
-1. Repo ko GitHub pe push karo (already covered in [SETUP.md](SETUP.md)).
-2. Render.com pe naya **Web Service** banao, GitHub repo connect karo.
+### Backend (Render)
+
+1. Push the repo to GitHub.
+2. Create a new **Web Service** and connect the repo.
 3. Root directory: `backend/`
-4. Build command: `pip install -r requirements.txt`
-5. Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-6. Environment variables set karo: `GROQ_API_KEY`, `GITHUB_TOKEN`, `DATABASE_URL` (agar DB use ho raha hai).
-7. Deploy — Render automatically Docker/requirements detect kar lega.
+4. Build: `pip install -r requirements.txt`
+5. Start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+6. Environment variables: `GROQ_API_KEY`, `GUARDIAN_MODEL`, and for the PR bot
+   `GITHUB_TOKEN` + `GITHUB_WEBHOOK_SECRET`.
+7. Deploy.
 
-### Steps — Frontend (Cloudflare Pages example)
+### Frontend (Cloudflare Pages)
 
-1. Cloudflare dashboard → Pages → **Create a project** → GitHub repo connect karo.
+1. Pages → **Create a project** → connect the repo.
 2. Root directory: `frontend/`
-3. Build command: `npm run build`
-4. Output directory: `dist` (Vite) ya `build` (CRA)
-5. Environment variable set karo: backend ka deployed URL (e.g. `VITE_API_URL=https://your-backend.onrender.com`)
-6. Deploy — Cloudflare automatically HTTPS + CDN de dega.
+3. Build: `npm run build`
+4. Output directory: `dist`
+5. Environment variable: `VITE_API_URL=https://your-backend.onrender.com/api`
+6. Deploy.
 
-### Steps — GitHub Webhook (agar Phase 2 bhi banaya)
+Remember to add the deployed frontend origin to `GUARDIAN_CORS_ORIGINS` on the
+backend.
 
-1. GitHub repo settings → Webhooks → Add webhook.
-2. Payload URL: deployed backend ka `/webhook/github` endpoint.
-3. Content type: `application/json`
-4. Events: "Let me select individual events" → **Pull requests** select karo (baaki sab uncheck).
-5. Secret set karo (`openssl rand -hex 32`) aur **wahi** value backend ke `GITHUB_WEBHOOK_SECRET` env var me daalo. Ye optional nahi hai — secret ke bina endpoint 503 deta hai aur kuch process nahi karta (fail closed).
-6. `GITHUB_TOKEN` bhi set karo (repo scope), warna bot PR padh aur comment kar nahi payega.
-7. Webhook add karne ke baad GitHub turant ek `ping` bhejta hai — Recent Deliveries me `202 {"status":"pong"}` dikhna chahiye. Yahi sabse tez confirmation hai ki secret dono taraf match kar raha hai.
+### GitHub webhook
+
+1. Repo Settings → Webhooks → Add webhook.
+2. Payload URL: the deployed backend's `/webhook/github`.
+3. Content type: `application/json` — **not** form-urlencoded, or the signature
+   will not match.
+4. Events: *Let me select individual events* → **Pull requests** only (untick
+   Pushes).
+5. Secret: generate with `openssl rand -hex 32` and put the **same** value in the
+   backend's `GITHUB_WEBHOOK_SECRET`. This is not optional — without it the
+   endpoint returns 503 and processes nothing (fail closed).
+6. Also set `GITHUB_TOKEN` (repo scope), or the bot can accept deliveries but
+   cannot read the PR.
+7. GitHub sends a `ping` immediately. Recent Deliveries should show
+   `202 {"status":"pong"}` — the fastest confirmation that both sides hold the
+   same secret.
