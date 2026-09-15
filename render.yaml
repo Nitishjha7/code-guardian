@@ -32,6 +32,12 @@ services:
       - key: GUARDIAN_MODEL
         value: openai/gpt-oss-120b
 
+      # Optional. Tried in order if GUARDIAN_MODEL is retired or rate limited.
+      # Same-provider fallback (see backend/app/config.py) - protects against
+      # a dead model id, not against Groq itself being down.
+      - key: GUARDIAN_FALLBACK_MODELS
+        value: openai/gpt-oss-20b
+
       # Single-service deploy is same-origin, so no cross-origin caller is
       # expected. Kept narrow rather than "*" because this service will hold a
       # GitHub token.

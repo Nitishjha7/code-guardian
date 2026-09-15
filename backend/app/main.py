@@ -154,6 +154,7 @@ def health() -> dict[str, Any]:
         "status": "ok",
         "version": __version__,
         "model": settings.guardian_model,
+        "fallback_models": settings.fallback_model_list,
         "groq_key_configured": bool(settings.groq_api_key),
         "guardrails": validators.describe(),
         "pr_bot": {

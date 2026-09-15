@@ -42,6 +42,7 @@ review incomplete.
 | **Measures its own routing** | 40 labelled cases across two sets, one of them held out. Exit code gates on recall. |
 | **Gates merges** | A Check Run on the PR: `failure` at high risk, `action_required` when the review was incomplete. |
 | **Streams its own progress** | `/api/review/stream` (SSE) yields a `progress` event as each graph node finishes — the routing decision, which auditor is running, when the patch generator starts — instead of one opaque wait. Built on `graph.stream(mode="updates")`, not a second traversal, so it cannot drift from what `/api/review` actually executes. |
+| **Falls over to a second model** | `get_llm()` returns a `with_fallbacks()` chain when `GUARDIAN_FALLBACK_MODELS` is set — a real answer to a real incident this project already had (Groq retired a model id mid-project with no warning). Same-provider only; see [config.py](backend/app/config.py) for why that distinction is stated rather than glossed over. |
 
 ---
 
@@ -115,6 +116,7 @@ Every row below was run, not claimed.
 | Webhook auth | valid HMAC **202** · tampered **401** · missing **401** · no secret **503** |
 | API errors | missing key **503** · rejected key **502** · rate limited **429** |
 | `/api/review/stream` | CSS sample: 4 progress events, no `tools` event (nothing was routed) · vulnerable-Python sample: 7 events including the supervisor→tools loop running twice, before the same `done` payload `/api/review` returns |
+| **Model gateway** | `GUARDIAN_MODEL` set to `llama-3.3-70b-versatile` — the exact id Groq retired mid-project (see "Before you demo" below) — with `GUARDIAN_FALLBACK_MODELS=openai/gpt-oss-20b`. The review still completed against **live Groq**: routed to both auditors, found the SQL injection and the hardcoded key, risk **84/critical**. Without the fallback this is a 502. |
 | Compose stack + frontend build | both clean |
 
 **Not verified:** the PR bot against a real repository — that needs a live PR.
