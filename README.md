@@ -43,6 +43,7 @@ review incomplete.
 | **Gates merges** | A Check Run on the PR: `failure` at high risk, `action_required` when the review was incomplete. |
 | **Streams its own progress** | `/api/review/stream` (SSE) yields a `progress` event as each graph node finishes — the routing decision, which auditor is running, when the patch generator starts — instead of one opaque wait. Built on `graph.stream(mode="updates")`, not a second traversal, so it cannot drift from what `/api/review` actually executes. |
 | **Falls over to a second model** | `get_llm()` returns a `with_fallbacks()` chain when `GUARDIAN_FALLBACK_MODELS` is set — a real answer to a real incident this project already had (Groq retired a model id mid-project with no warning). Same-provider only; see [config.py](backend/app/config.py) for why that distinction is stated rather than glossed over. |
+| **Prices its own routing decision** | Every review returns `token_usage` — calls, tokens and USD per model, from Groq's own `usage_metadata`, not an estimate. This is what turns "routing saves cost" from a claim into a number: real runs measured **1 call / $0.0003 on CSS** vs **4 calls / $0.0020 on vulnerable Python** — roughly 7×, for the same reason the latency gap exists. |
 
 ---
 
@@ -109,7 +110,7 @@ Every row below was run, not claimed.
 
 | Check | Result |
 |---|---|
-| Backend unit tests | **111 passing**, no API key required |
+| Backend unit tests | **122 passing**, no API key required |
 | Vulnerable Python sample | 5 security + 2 performance findings; **3 confirmed by both engines**; Bandit caught 2 SQLi sites the LLM missed |
 | Risk score | vulnerable Python **100/100 critical** · slow JS **10/100 low** · CSS **0/100 none** |
 | Failed audit | band `unknown`, *"Audit failed — this code was not checked"*, never a clean pass |
@@ -117,6 +118,7 @@ Every row below was run, not claimed.
 | API errors | missing key **503** · rejected key **502** · rate limited **429** |
 | `/api/review/stream` | CSS sample: 4 progress events, no `tools` event (nothing was routed) · vulnerable-Python sample: 7 events including the supervisor→tools loop running twice, before the same `done` payload `/api/review` returns |
 | **Model gateway** | `GUARDIAN_MODEL` set to `llama-3.3-70b-versatile` — the exact id Groq retired mid-project (see "Before you demo" below) — with `GUARDIAN_FALLBACK_MODELS=openai/gpt-oss-20b`. The review still completed against **live Groq**: routed to both auditors, found the SQL injection and the hardcoded key, risk **84/critical**. Without the fallback this is a 502. |
+| **Token/cost tracking** | Live, against real Groq: the vulnerable-Python sample made **4 LLM calls, 5,815 tokens, $0.00195**; the CSS sample (router skips both auditors) made **1 call, 1,104 tokens, $0.00028**. Confirmed isolated across concurrent reviews — two `anyio` worker threads running at once do not see each other's tokens (each gets its own `contextvars` copy). |
 | Compose stack + frontend build | both clean |
 
 **Not verified:** the PR bot against a real repository — that needs a live PR.

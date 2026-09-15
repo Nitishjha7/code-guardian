@@ -115,6 +115,7 @@ class ReviewResponse(BaseModel):
     tests_note: str = ""
     guardrail_report: dict[str, Any]
     logs: list[str]
+    token_usage: dict[str, Any] = {}
 
 
 def _review_response(state: dict[str, Any], fallback_language: str) -> ReviewResponse:
@@ -140,6 +141,7 @@ def _review_response(state: dict[str, Any], fallback_language: str) -> ReviewRes
         tests_note=state.get("tests_note", ""),
         guardrail_report=state.get("guardrail_report", {}),
         logs=state.get("logs", []),
+        token_usage=state.get("token_usage", {}),
     )
 
 

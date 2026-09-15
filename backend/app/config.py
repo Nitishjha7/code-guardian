@@ -14,6 +14,8 @@ from functools import lru_cache
 from langchain_groq import ChatGroq
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from .token_usage import TRACKING_CALLBACK
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -57,6 +59,12 @@ def _client(model: str, temperature: float, settings: Settings) -> ChatGroq:
         temperature=temperature,
         max_retries=2,
         timeout=120,
+        # Bound once, here, rather than passed at every one of the five call
+        # sites — see app/token_usage.py for why one stateless callback
+        # instance shared across every cached client is the correct scope,
+        # and app/graph.py for where the per-review tracker it reads from
+        # actually gets set.
+        callbacks=[TRACKING_CALLBACK],
     )
 
 

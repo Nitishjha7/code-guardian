@@ -80,3 +80,9 @@ class ReviewerState(TypedDict, total=False):
 
     force_full_audit: bool
     logs: Annotated[list[str], operator.add]
+
+    # Tokens and estimated cost across every agent call in this review, keyed
+    # by which model actually answered (the fallback model, if one fired) -
+    # see app/token_usage.py for why this is tracked per-review rather than
+    # per-agent.
+    token_usage: dict[str, Any]

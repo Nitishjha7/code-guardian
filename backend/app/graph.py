@@ -24,6 +24,7 @@ from . import risk
 from .agents import patch_generator, supervisor, test_generator
 from .guardrails_config import validate_output
 from .state import Finding, ReviewerState
+from .token_usage import new_tracker
 
 _SEVERITY_ORDER = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
 
@@ -402,6 +403,7 @@ def run_review(
     # The tools read the submission from module state rather than taking it as a
     # tool argument - see the note in app/agents/supervisor.py.
     supervisor.set_current_input(source_code, language)
+    tracker = new_tracker()
 
     initial: ReviewerState = {
         "source_code": source_code,
@@ -418,6 +420,7 @@ def run_review(
     result["logs"] = list(result.get("logs", [])) + [
         f"Review finished in {elapsed:.2f}s."
     ]
+    result["token_usage"] = tracker.summary()
     return result
 
 
@@ -460,6 +463,7 @@ def run_review_stream(
     """
     started = time.perf_counter()
     supervisor.set_current_input(source_code, language)
+    tracker = new_tracker()
 
     state: ReviewerState = {
         "source_code": source_code,
@@ -488,4 +492,5 @@ def run_review_stream(
     state["logs"] = list(state.get("logs", [])) + [
         f"Review finished in {elapsed:.2f}s."
     ]
+    state["token_usage"] = tracker.summary()
     yield "done", state
