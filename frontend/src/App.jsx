@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { health, review, reviewPR } from './api'
+import { health, reviewPR, reviewStream } from './api'
 import { SAMPLES } from './samples'
 import { CARD, band } from './lib/ui'
 import { fromPR, fromReview, load, record } from './lib/history'
@@ -37,6 +37,11 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [prLoading, setPrLoading] = useState(false)
   const [error, setError] = useState(null)
+  // Every graph node that has finished so far in the review currently in
+  // flight — accumulated, not just the latest one, so a stage stays marked
+  // "done" once its node has run even after a later node completes. Reset
+  // between runs so a stale set from the last review can't linger.
+  const [completedNodes, setCompletedNodes] = useState(new Set())
 
   const [entries, setEntries] = useState(() => load())
   const [openFinding, setOpenFinding] = useState(null)
@@ -61,8 +66,11 @@ export default function App() {
     setLoading(true)
     setError(null)
     setPrResult(null)
+    setCompletedNodes(new Set())
     try {
-      const data = await review({ sourceCode: code, language, forceFullAudit })
+      const data = await reviewStream({ sourceCode: code, language, forceFullAudit }, (event) =>
+        setCompletedNodes((prev) => new Set(prev).add(event.node)),
+      )
       setResult(data)
       setReviewedSource(code)
       setEntries(record(fromReview(data, { label: filename, language })))
@@ -74,6 +82,7 @@ export default function App() {
       setError(e.message)
     } finally {
       setLoading(false)
+      setCompletedNodes(new Set())
     }
   }
 
@@ -148,7 +157,7 @@ export default function App() {
                 {panel}
 
                 <div ref={resultsRef} className="space-y-4">
-                  <RunStrip result={result} loading={loading} />
+                  <RunStrip result={result} loading={loading} completedNodes={completedNodes} />
                   {result && !loading && (
                     <>
                       <AgentFindings result={result} onOpenFinding={setOpenFinding} />

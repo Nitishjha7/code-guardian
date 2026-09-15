@@ -14,8 +14,20 @@ const STAGES = [
  * on a CSS file both auditors read "skipped", on vulnerable Python they read
  * "ran" - the routing decision made visible instead of described.
  */
-export default function RunStrip({ result, loading }) {
-  if (loading) return <Skeleton />
+// Maps a graph node name (from the SSE stream) to the strip's own stage id.
+// "tools" runs whichever auditor(s) the supervisor routed to, so one node can
+// light up either or both of two stages — everything else is one-to-one.
+const NODE_TO_STAGES = {
+  supervisor: ['route'],
+  tools: ['security', 'performance'],
+  collect: ['route', 'security', 'performance'],
+  patch: ['patch'],
+  tests: ['tests'],
+  guardrail: ['guard'],
+}
+
+export default function RunStrip({ result, loading, completedNodes }) {
+  if (loading) return <Skeleton completedNodes={completedNodes} />
   if (!result) return null
 
   const routed = result.routed_to || []
@@ -86,13 +98,29 @@ function stageOf(name, routed, failed, findings) {
   return { tone: n ? 'ok' : 'skip', text: n ? `${n} found` : 'clean' }
 }
 
-function Skeleton() {
+/**
+ * The skeleton doubles as the live progress view: once a node in the stream
+ * has completed, its stage(s) lose the pulse and show the node's own label
+ * instead of a placeholder bar. Stages the graph hasn't reached yet — and, on
+ * a CSS-only run, ones it will never reach — stay pulsing, which is itself
+ * informative: a stage still pulsing after `done` would mean this mapping is
+ * out of sync with the graph, not that something hung.
+ */
+function Skeleton({ completedNodes }) {
+  const reached = new Set(
+    [...(completedNodes || [])].flatMap((node) => NODE_TO_STAGES[node] || []),
+  )
+
   return (
     <section className={`${CARD} flex flex-wrap items-stretch divide-x divide-slate-800`}>
       {['risk', ...STAGES.map((s) => s.id)].map((id) => (
         <div key={id} className="min-w-[116px] flex-1 space-y-2 px-4 py-3.5">
           <div className="h-2 w-12 animate-pulse rounded bg-slate-800" />
-          <div className="h-3 w-16 animate-pulse rounded bg-slate-800/70" />
+          {reached.has(id) ? (
+            <div className="text-sm text-slate-400">done</div>
+          ) : (
+            <div className="h-3 w-16 animate-pulse rounded bg-slate-800/70" />
+          )}
         </div>
       ))}
     </section>

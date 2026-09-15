@@ -419,3 +419,73 @@ def run_review(
         f"Review finished in {elapsed:.2f}s."
     ]
     return result
+
+
+# --------------------------------------------------------------------------- #
+# Streaming
+# --------------------------------------------------------------------------- #
+
+# What each node is worth telling a viewer, keyed by the same names used in
+# ``build_graph``. This is presentation text only - the node functions above
+# stay exactly as they were for ``run_review``, so a caller that doesn't want
+# streaming pays nothing for it.
+_NODE_LABELS = {
+    "supervisor": "Supervisor deciding which auditors this diff needs",
+    "tools": "Running the routed auditor(s)",
+    "collect": "Collecting findings and scoring risk",
+    "patch": "Generating a patch",
+    "tests": "Generating a regression test",
+    "guardrail": "Scanning outbound text for secrets and tone",
+}
+
+
+def run_review_stream(
+    source_code: str,
+    language: str = "python",
+    force_full_audit: bool = False,
+):
+    """Same review as ``run_review``, yielded one node at a time.
+
+    A CSS sample finishes in under a second and a vulnerable-Python sample
+    takes over ten - ``run_review`` makes both look identical to a caller
+    until the whole thing is done. This generator yields a
+    ``("progress", {...})`` tuple the moment each node in the graph finishes,
+    then a final ``("done", ReviewerState)`` with everything ``run_review``
+    would have returned.
+
+    Built on ``graph.stream(..., stream_mode="updates")`` rather than a
+    second, hand-written traversal of the same graph - the node functions and
+    the edges are the single source of truth in both paths, so this cannot
+    drift from what ``run_review`` actually executes.
+    """
+    started = time.perf_counter()
+    supervisor.set_current_input(source_code, language)
+
+    state: ReviewerState = {
+        "source_code": source_code,
+        "language": language,
+        "messages": [],
+        "security_issues": [],
+        "performance_issues": [],
+        "force_full_audit": force_full_audit,
+        "logs": [f"Review started - language={language} - {len(source_code)} chars."],
+    }
+
+    for update in get_graph().stream(state, config={"recursion_limit": 12}, stream_mode="updates"):
+        # ``update`` is ``{node_name: partial_state}`` - a conditional edge or a
+        # loop back through "tools" means a node can appear more than once, so
+        # this merges rather than replaces, exactly like LangGraph does
+        # internally for the fields each node actually returns.
+        for node_name, partial in update.items():
+            state.update(partial)
+            yield "progress", {
+                "node": node_name,
+                "label": _NODE_LABELS.get(node_name, node_name),
+                "elapsed_ms": int((time.perf_counter() - started) * 1000),
+            }
+
+    elapsed = time.perf_counter() - started
+    state["logs"] = list(state.get("logs", [])) + [
+        f"Review finished in {elapsed:.2f}s."
+    ]
+    yield "done", state

@@ -209,3 +209,104 @@ def test_collect_node_records_both_auditors():
     assert out["routed_to"] == ["performance_audit", "security_audit"]
     assert len(out["security_issues"]) == 1
     assert len(out["performance_issues"]) == 1
+
+
+# --------------------------------------------------------------------------- #
+# run_review_stream
+# --------------------------------------------------------------------------- #
+#
+# These test the generator's contract against a fake compiled graph, not the
+# real one - the real graph needs a live model and is exercised separately
+# (README "Verified" table, and by hand against /api/review/stream). What is
+# tested here is the seam that would break silently: does each node update
+# turn into exactly one progress event, does state accumulate the way
+# LangGraph's own merge does, and does the final event carry the complete
+# state - all independent of any LLM call.
+
+class _FakeCompiledGraph:
+    """Stands in for ``get_graph()``. ``updates`` mirrors what
+    ``graph.stream(..., stream_mode="updates")`` yields: one
+    ``{node_name: partial_state}`` dict per node completion."""
+
+    def __init__(self, updates):
+        self._updates = updates
+
+    def stream(self, state, config=None, stream_mode=None):
+        assert stream_mode == "updates"
+        yield from self._updates
+
+
+def test_stream_emits_one_progress_event_per_node_update(monkeypatch):
+    import app.graph as graph_module
+
+    fake = _FakeCompiledGraph([
+        {"supervisor": {"messages": []}},
+        {"collect": {"routed_to": []}},
+    ])
+    monkeypatch.setattr(graph_module, "get_graph", lambda: fake)
+
+    events = list(graph_module.run_review_stream("body { color: red; }", "css"))
+
+    kinds = [kind for kind, _ in events]
+    assert kinds == ["progress", "progress", "done"]
+    assert events[0][1]["node"] == "supervisor"
+    assert events[1][1]["node"] == "collect"
+
+
+def test_stream_a_node_looped_twice_emits_two_events(monkeypatch):
+    """The supervisor/tools loop can run more than once - each pass through
+    "tools" is its own event, not deduplicated away."""
+    import app.graph as graph_module
+
+    fake = _FakeCompiledGraph([
+        {"supervisor": {}},
+        {"tools": {}},
+        {"supervisor": {}},
+        {"tools": {}},
+        {"collect": {}},
+    ])
+    monkeypatch.setattr(graph_module, "get_graph", lambda: fake)
+
+    nodes = [
+        payload["node"]
+        for kind, payload in graph_module.run_review_stream("x", "python")
+        if kind == "progress"
+    ]
+    assert nodes == ["supervisor", "tools", "supervisor", "tools", "collect"]
+
+
+def test_stream_final_state_accumulates_across_node_updates(monkeypatch):
+    """The "done" payload has to reflect every node's contribution, the same
+    way LangGraph merges partial updates into one state - not just the last
+    node's return value."""
+    import app.graph as graph_module
+
+    fake = _FakeCompiledGraph([
+        {"supervisor": {"messages": []}},
+        {"collect": {"routed_to": ["security_audit"], "risk": {"score": 80, "band": "high"}}},
+        {"patch": {"fixed_code": "safe_code_here"}},
+        {"guardrail": {"guardrail_report": {"engine": "local-pattern-scanner", "passed": True}}},
+    ])
+    monkeypatch.setattr(graph_module, "get_graph", lambda: fake)
+
+    *_, (kind, final_state) = graph_module.run_review_stream("x", "python")
+
+    assert kind == "done"
+    assert final_state["routed_to"] == ["security_audit"]
+    assert final_state["risk"]["band"] == "high"
+    assert final_state["fixed_code"] == "safe_code_here"
+    assert final_state["guardrail_report"]["passed"] is True
+    # And still carries what run_review's own return value always has.
+    assert any("Review finished in" in line for line in final_state["logs"])
+
+
+def test_stream_unknown_node_falls_back_to_its_own_name(monkeypatch):
+    """A label is presentation only - a graph change that adds a node before
+    _NODE_LABELS is updated should degrade to the raw node name, not crash."""
+    import app.graph as graph_module
+
+    fake = _FakeCompiledGraph([{"some_new_node": {}}])
+    monkeypatch.setattr(graph_module, "get_graph", lambda: fake)
+
+    kind, payload = next(graph_module.run_review_stream("x", "python"))
+    assert payload["label"] == "some_new_node"

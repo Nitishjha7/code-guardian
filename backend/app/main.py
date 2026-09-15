@@ -6,6 +6,7 @@ command points at: ``uvicorn app.main:app``.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -14,12 +15,13 @@ from typing import Any, Literal
 import anyio
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from . import __version__, pr_bot
 from .config import get_settings
-from .graph import run_review
+from .graph import run_review, run_review_stream
 from .guardrails_config import validators
 from .mcp_clients import github_client
 
@@ -115,6 +117,32 @@ class ReviewResponse(BaseModel):
     logs: list[str]
 
 
+def _review_response(state: dict[str, Any], fallback_language: str) -> ReviewResponse:
+    """Build the response payload from graph state.
+
+    One function so ``/api/review`` and the streaming endpoint's final event
+    read the same fields in the same order - the field list living in two
+    places is exactly the kind of drift that makes a streamed result quietly
+    disagree with the non-streamed one.
+    """
+    return ReviewResponse(
+        language=state.get("language", fallback_language),
+        routed_to=state.get("routed_to", []),
+        risk=RiskScore(**(state.get("risk") or {})),
+        failed_audits=state.get("failed_audits", []),
+        audit_errors=state.get("audit_errors", []),
+        security_issues=[Finding(**f) for f in state.get("security_issues", [])],
+        performance_issues=[Finding(**f) for f in state.get("performance_issues", [])],
+        fixed_code=state.get("fixed_code", ""),
+        diff=state.get("diff", ""),
+        summary_report=state.get("summary_report", ""),
+        generated_tests=state.get("generated_tests", ""),
+        tests_note=state.get("tests_note", ""),
+        guardrail_report=state.get("guardrail_report", {}),
+        logs=state.get("logs", []),
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Routes
 # --------------------------------------------------------------------------- #
@@ -169,22 +197,62 @@ async def review(request: ReviewRequest) -> ReviewResponse:
             ) from exc
         raise HTTPException(status_code=500, detail=f"Review failed: {exc}") from exc
 
-    return ReviewResponse(
-        language=state.get("language", request.language),
-        routed_to=state.get("routed_to", []),
-        risk=RiskScore(**(state.get("risk") or {})),
-        failed_audits=state.get("failed_audits", []),
-        audit_errors=state.get("audit_errors", []),
-        security_issues=[Finding(**f) for f in state.get("security_issues", [])],
-        performance_issues=[Finding(**f) for f in state.get("performance_issues", [])],
-        fixed_code=state.get("fixed_code", ""),
-        diff=state.get("diff", ""),
-        summary_report=state.get("summary_report", ""),
-        generated_tests=state.get("generated_tests", ""),
-        tests_note=state.get("tests_note", ""),
-        guardrail_report=state.get("guardrail_report", {}),
-        logs=state.get("logs", []),
-    )
+    return _review_response(state, request.language)
+
+
+@app.post("/api/review/stream")
+async def review_stream(request: ReviewRequest) -> StreamingResponse:
+    """Same review as ``/api/review``, as Server-Sent Events.
+
+    A vulnerable-Python sample takes over ten seconds end to end and a plain
+    CSS file well under one - ``/api/review`` makes both look identical to the
+    caller until the whole thing finishes. This streams a ``progress`` event
+    the moment each graph node completes (which auditor started, which
+    finished, when the patch generator kicked in) and a final ``done`` event
+    carrying the exact payload ``/api/review`` would have returned in one
+    shot - see ``_review_response``, used by both.
+
+    ``run_review_stream`` is a plain generator wrapping ``graph.stream(...)``;
+    the queue and the background thread below exist only to get a synchronous
+    generator's output onto the async event loop without blocking it, the same
+    problem ``anyio.to_thread.run_sync`` solves for the non-streaming endpoint.
+    """
+    queue: asyncio.Queue = asyncio.Queue()
+    loop = asyncio.get_event_loop()
+    SENTINEL = object()
+
+    def produce() -> None:
+        try:
+            for kind, payload in run_review_stream(
+                source_code=request.source_code,
+                language=request.language,
+                force_full_audit=request.force_full_audit,
+            ):
+                if kind == "done":
+                    payload = _review_response(payload, request.language).model_dump()
+                asyncio.run_coroutine_threadsafe(
+                    queue.put((kind, payload)), loop
+                ).result()
+        except Exception as exc:  # noqa: BLE001 - reported to the client as an event, not a 500
+            logger.exception("Streaming review failed")
+            asyncio.run_coroutine_threadsafe(
+                queue.put(("error", {"detail": str(exc)})), loop
+            ).result()
+        finally:
+            asyncio.run_coroutine_threadsafe(queue.put((SENTINEL, None)), loop).result()
+
+    async def event_source():
+        await anyio.to_thread.run_sync(produce, limiter=_REVIEW_LIMITER)
+        # produce() has already fully populated the queue by the time
+        # run_sync returns (each put is awaited via run_coroutine_threadsafe
+        # before the next one), so draining it here is sequential, not racy.
+        while True:
+            kind, payload = await queue.get()
+            if kind is SENTINEL:
+                return
+            yield f"event: {kind}\ndata: {json.dumps(payload)}\n\n"
+
+    return StreamingResponse(event_source(), media_type="text/event-stream")
 
 
 class ReviewPRRequest(BaseModel):

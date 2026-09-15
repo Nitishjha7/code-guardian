@@ -41,6 +41,7 @@ review incomplete.
 | **Keeps failure distinct from silence** | `failed_audits` is a separate state. A failed audit yields risk band `unknown`, never `0/100 none`. |
 | **Measures its own routing** | 40 labelled cases across two sets, one of them held out. Exit code gates on recall. |
 | **Gates merges** | A Check Run on the PR: `failure` at high risk, `action_required` when the review was incomplete. |
+| **Streams its own progress** | `/api/review/stream` (SSE) yields a `progress` event as each graph node finishes — the routing decision, which auditor is running, when the patch generator starts — instead of one opaque wait. Built on `graph.stream(mode="updates")`, not a second traversal, so it cannot drift from what `/api/review` actually executes. |
 
 ---
 
@@ -107,12 +108,13 @@ Every row below was run, not claimed.
 
 | Check | Result |
 |---|---|
-| Backend unit tests | **107 passing**, no API key required |
+| Backend unit tests | **111 passing**, no API key required |
 | Vulnerable Python sample | 5 security + 2 performance findings; **3 confirmed by both engines**; Bandit caught 2 SQLi sites the LLM missed |
 | Risk score | vulnerable Python **100/100 critical** · slow JS **10/100 low** · CSS **0/100 none** |
 | Failed audit | band `unknown`, *"Audit failed — this code was not checked"*, never a clean pass |
 | Webhook auth | valid HMAC **202** · tampered **401** · missing **401** · no secret **503** |
 | API errors | missing key **503** · rejected key **502** · rate limited **429** |
+| `/api/review/stream` | CSS sample: 4 progress events, no `tools` event (nothing was routed) · vulnerable-Python sample: 7 events including the supervisor→tools loop running twice, before the same `done` payload `/api/review` returns |
 | Compose stack + frontend build | both clean |
 
 **Not verified:** the PR bot against a real repository — that needs a live PR.
