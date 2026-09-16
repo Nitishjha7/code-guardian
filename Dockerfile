@@ -35,10 +35,18 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/app ./app
+COPY backend/logging.json .
 COPY --from=frontend /fe/dist ./static
 
 EXPOSE 8000
 
+# --log-config, not just app/logging_config.py's own root-logger setup:
+# uvicorn's own logging.config.dictConfig() runs at server startup, after this
+# app is imported, and re-points uvicorn/uvicorn.access at plain-text handlers
+# regardless of what already happened to root. Without this flag every access
+# log line on the deployed service - the ones with real path/status/latency -
+# stays unstructured while the app's own logs are correctly JSON.
+#
 # Render and most PaaS inject the port to bind as $PORT. Shell form so it
 # expands; the default keeps plain `docker run` working locally.
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --log-config logging.json"]
