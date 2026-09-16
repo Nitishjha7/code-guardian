@@ -13,20 +13,22 @@ from pathlib import Path
 from typing import Any, Literal
 
 import anyio
-from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field, field_validator
 
 from . import __version__, pr_bot
 from .config import get_settings
 from .graph import run_review, run_review_stream
 from .guardrails_config import validators
+from .logging_config import configure_json_logging
 from .mcp_clients import github_client
 
+configure_json_logging()
 logger = logging.getLogger("code_guardian")
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 app = FastAPI(
     title="Code Guardian",
@@ -419,6 +421,14 @@ def graph_topology() -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"mermaid": mermaid}
+
+
+@app.get("/metrics")
+def metrics() -> Response:
+    """Prometheus scrape target — reviews, findings, audit failures, and the
+    LLM gateway's own call/token/fallback counts. See app/metrics.py for why
+    each metric exists; none of them are generic request counters."""
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 # Mounted last, and deliberately so: a mount at "/" swallows every path beneath

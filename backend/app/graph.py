@@ -22,7 +22,9 @@ from langgraph.prebuilt import ToolNode
 
 from . import risk
 from .agents import patch_generator, supervisor, test_generator
+from .config import get_settings
 from .guardrails_config import validate_output
+from .metrics import REVIEW_DURATION_SECONDS, record_review
 from .state import Finding, ReviewerState
 from .token_usage import new_tracker
 
@@ -421,6 +423,8 @@ def run_review(
         f"Review finished in {elapsed:.2f}s."
     ]
     result["token_usage"] = tracker.summary()
+    REVIEW_DURATION_SECONDS.observe(elapsed)
+    record_review(result, primary_model=get_settings().guardian_model)
     return result
 
 
@@ -493,4 +497,6 @@ def run_review_stream(
         f"Review finished in {elapsed:.2f}s."
     ]
     state["token_usage"] = tracker.summary()
+    REVIEW_DURATION_SECONDS.observe(elapsed)
+    record_review(state, primary_model=get_settings().guardian_model)
     yield "done", state
