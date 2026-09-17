@@ -24,6 +24,13 @@ from . import risk
 from .agents import patch_generator, supervisor, test_generator
 from .config import get_settings
 from .guardrails_config import validate_output
+from .memory.episodic import (
+    format_episodes_for_prompt,
+    make_signature,
+    recall_similar,
+    record_episode_from_result,
+)
+from .memory.semantic import format_facts_for_prompt, recall_facts
 from .metrics import REVIEW_DURATION_SECONDS, record_review
 from .state import Finding, ReviewerState
 from .token_usage import new_tracker
@@ -107,6 +114,23 @@ def collect_node(state: ReviewerState) -> dict:
 
     security.sort(key=lambda f: _SEVERITY_ORDER.get(f.get("severity", "Medium"), 2))
     performance.sort(key=lambda f: _SEVERITY_ORDER.get(f.get("severity", "Medium"), 2))
+
+    # Cross-review memory (app/memory/): annotate each finding with precedent
+    # before anything downstream renders it. This is read-only lookup -
+    # writing the episode this review becomes happens once, at the end of
+    # run_review/run_review_stream, after we know whether patch_node actually
+    # fixed it.
+    source_code = state.get("source_code", "")
+    for finding in security + performance:
+        title = finding.get("title", "")
+        if not title:
+            finding["memory_note"] = ""
+            continue
+        signature = make_signature(source_code, title)
+        episodes = recall_similar(source_code, title)
+        facts = recall_facts(signature.split(":", 1)[0], title)
+        note = format_facts_for_prompt(facts) or format_episodes_for_prompt(episodes)
+        finding["memory_note"] = note
 
     # Scored here, where the findings are first complete, so every consumer
     # downstream (report, API, PR comment, and the future Check Run gate) reads
@@ -398,6 +422,7 @@ def run_review(
     source_code: str,
     language: str = "python",
     force_full_audit: bool = False,
+    repo_id: str = "",
 ) -> ReviewerState:
     """Execute one full review. The single entry point the API uses."""
     started = time.perf_counter()
@@ -414,6 +439,7 @@ def run_review(
         "security_issues": [],
         "performance_issues": [],
         "force_full_audit": force_full_audit,
+        "repo_id": repo_id,
         "logs": [f"Review started - language={language} - {len(source_code)} chars."],
     }
 
@@ -425,6 +451,13 @@ def run_review(
     result["token_usage"] = tracker.summary()
     REVIEW_DURATION_SECONDS.observe(elapsed)
     record_review(result, primary_model=get_settings().guardian_model)
+    record_episode_from_result(
+        source_code=source_code,
+        language=language,
+        findings=(result.get("security_issues") or []) + (result.get("performance_issues") or []),
+        fixed_code=result.get("fixed_code", ""),
+        repo_id=repo_id,
+    )
     return result
 
 
@@ -450,6 +483,7 @@ def run_review_stream(
     source_code: str,
     language: str = "python",
     force_full_audit: bool = False,
+    repo_id: str = "",
 ):
     """Same review as ``run_review``, yielded one node at a time.
 
@@ -476,6 +510,7 @@ def run_review_stream(
         "security_issues": [],
         "performance_issues": [],
         "force_full_audit": force_full_audit,
+        "repo_id": repo_id,
         "logs": [f"Review started - language={language} - {len(source_code)} chars."],
     }
 
@@ -499,4 +534,11 @@ def run_review_stream(
     state["token_usage"] = tracker.summary()
     REVIEW_DURATION_SECONDS.observe(elapsed)
     record_review(state, primary_model=get_settings().guardian_model)
+    record_episode_from_result(
+        source_code=source_code,
+        language=language,
+        findings=(state.get("security_issues") or []) + (state.get("performance_issues") or []),
+        fixed_code=state.get("fixed_code", ""),
+        repo_id=repo_id,
+    )
     yield "done", state
