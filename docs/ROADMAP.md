@@ -16,10 +16,12 @@ summarises it; [TECHNICAL_SPEC §7](TECHNICAL_SPEC.md) details the deferred item
 | 2c | Risk score on every review | ✅ done |
 | 2d | Test Generation Agent | ✅ done |
 | 2e | GitHub Check Run status (gates merges on the risk score) | ✅ done |
-| 3–5 | Advanced Intelligence, Learning & Memory, full CI/CD | ⬜ deliberately deferred |
+| 2f | Streaming (`/api/review/stream`), model gateway fallback, token/cost tracking, JSON logging | ✅ done |
+| 2g | Cross-review memory — episodic, semantic, long-term (`app/memory/`) | ✅ done |
+| 3, 5 | Advanced Intelligence Layer, full CI/CD | ⬜ deliberately deferred |
 
 **Built although it was not in the plan:** a routing eval with a **held-out set**
-(`backend/evals/`, 40 cases), 107 unit tests, and the full docs set.
+(`backend/evals/`, 40 cases), 161 unit tests, and the full docs set.
 
 ---
 
@@ -29,7 +31,8 @@ Everything here was actually run, not claimed.
 
 | Check | Result |
 |---|---|
-| Unit tests | **107 pass**, no API key needed |
+| Unit tests | **161 pass**, no API key needed |
+| Episodic memory, live | The same SQL-injection snippet reviewed twice against live Groq: `memory_note` empty on the first pass, `"seen 1 time(s) before (1 fixed)"` on the second — persisted across a full container rebuild via the named Docker volume. |
 | Routing eval, **held-out** (20 cases, never tuned against) | as-shipped security recall **100%**, 0 false negatives; router-only 89%; performance 43% |
 | Routing eval, dev (20 cases, tuned against) | as-shipped 100%; router-only 90%; performance 50% |
 | Static fusion (vulnerable Python) | 8 raw findings → **5** after dedup; **3 confirmed by both engines**; Bandit found 2 SQLi sites the LLM missed |
@@ -85,12 +88,23 @@ Technically easy (one `@tool` each), but the value per agent is low and each new
 agent lowers routing precision. Test Coverage was promoted out of this phase
 (shipped as 2d) precisely because it fitted the existing pattern.
 
-### Phase 4 — Learning & Memory
+### Phase 4 — Learning & Memory ✅ done (partially — see below)
 
-Feedback loop, team-specific rules via RAG, historical PR analysis.
+Shipped as `app/memory/`: episodic (has this exact code shape and finding been
+seen before, was it fixed or dismissed), semantic (a finding reported repeatedly
+and never fixed, distilled into a stated fact via `consolidate_facts`), long-term
+(explicit per-repo preferences via `PUT /api/preferences/{repo}`). SQLite-backed,
+not the RAG/vector-DB approach this phase originally implied — see
+[docs/CODE_NOTES.md](CODE_NOTES.md) for why: this project has no other database
+and Groq has no embeddings API, and the actual similarity question ("is this the
+same code shape") is answered exactly by a normalized signature match, not
+approximately by a vector search.
 
-Needs persistent storage, embeddings and a feedback-capture mechanism. The review
-graph is **stateless** today — this is an architecture change, not an addition.
+**What is still genuinely deferred from the original phase description:**
+"historical PR analysis" (mining a repo's full PR history to seed memory before
+its first review) and team-specific *rules* as a first-class object separate
+from preferences. Both are real projects on top of what exists now, not gaps in
+what shipped.
 
 ### Phase 5 — Full CI/CD integration
 
@@ -126,7 +140,10 @@ Knowing these yourself is the most important thing for an interview.
 2. **Bandit is Python-only.** Elsewhere the security audit is the LLM alone.
    Semgrep would be one more `_run_*` function of the same shape.
 3. **The PR bot has not run against a real repository** (2a).
-4. **No persistence** — every review is stateless.
+4. **A single review still holds no state of its own** — `app/memory/` remembers
+   *across* reviews (past findings, distilled facts, per-repo preferences), but
+   nothing about one review's messages or intermediate graph state survives
+   past that request, by design (see TECHNICAL_SPEC.md).
 5. **20 cases per eval set is small** — the interval around 100% is wide, and the
    cases are self-written and self-labelled.
 6. **Eval numbers are from 20b, not the default 120b.**
