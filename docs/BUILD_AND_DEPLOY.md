@@ -142,7 +142,7 @@ failed and malformed audits), every guardrail pattern, and the whole Phase 2
 surface: HMAC verification, event filtering, file selection, PR-link parsing and
 added-line extraction.
 
-**107 tests, no API key needed.** Not covered: the agent prompts themselves, and
+**161 tests, no API key needed.** Not covered: the agent prompts themselves, and
 the PyGithub calls (they need a token and a live PR).
 
 Routing quality is measured separately by `backend/evals/` — two sets of 20, one
@@ -186,9 +186,18 @@ Adaptive CRAG project had to leave Render for exactly this reason — it peaks a
 once the cross-encoder loads. Code Guardian has no embedding model and no reranker, so
 it fits with room to spare.
 
-There is no database in the blueprint: a review is one graph invocation holding no
-state between requests, and the PR bot writes its results back to GitHub rather than
-to a store of its own.
+A review is still one graph invocation holding no state of its own between requests,
+and the PR bot writes its results back to GitHub rather than to a store of its own —
+that part of the original claim still holds. What changed since it was written:
+`app/memory/` now persists episodic/semantic/long-term facts *across* reviews, as a
+SQLite file at `MEMORY_DB_PATH` (default `/data/memory.db`). Locally, docker-compose.yml
+mounts a named volume there so it survives a rebuild. **On this free Render blueprint
+it will not** — Render's free web-service plan has no persistent disk (that needs a
+paid plan), so `/data` lives on the container's ephemeral filesystem and memory resets
+on every deploy and every free-tier spin-down. That is `app/memory/`'s fail-open design
+working as intended, not a bug: the service starts fine, memory is just cold again. A
+paid Render disk, or moving `MEMORY_DB_PATH` to a small managed volume elsewhere, is
+what closing this gap would take.
 
 ### Alternatives
 

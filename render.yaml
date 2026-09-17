@@ -4,9 +4,13 @@
 # React app), so the whole demo lives on one URL with no CORS to configure and
 # only one service to keep awake.
 #
-# There is no database here: Code Guardian holds no state between requests. A
-# review is one graph invocation, and the PR bot writes its results back to
-# GitHub rather than to a store of its own.
+# There is no managed database here: a review is one graph invocation holding no
+# state of its own, and the PR bot writes its results back to GitHub rather than
+# to a store of its own. app/memory/'s cross-review facts (episodic, semantic,
+# long-term) live in a SQLite file at MEMORY_DB_PATH instead - on this free plan
+# that file sits on the container's ephemeral filesystem, since Render's free
+# tier has no persistent disk, so memory resets on every deploy. Fails open by
+# design; see docs/BUILD_AND_DEPLOY.md's Deployment section for the trade-off.
 #
 # Measured before choosing the free plan: the backend image is 317 MB and peaks
 # well inside the 512 MB limit — no embedding model and no reranker, unlike the
