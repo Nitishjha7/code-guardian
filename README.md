@@ -221,7 +221,7 @@ runs and tests found.
 |---|---|
 | [TECHNICAL_SPEC](docs/TECHNICAL_SPEC.md) | architecture, graph topology, §3a routing argument, deviations |
 | [CODE_NOTES](docs/CODE_NOTES.md) | file-by-file *why this exists* |
-| [CODE_QA](docs/CODE_QA.md) | 36 questions to defend the code, with answers |
+| [CODE_QA](docs/CODE_QA.md) | 39 questions to defend the code, with answers |
 | [INTERVIEW_NOTES](docs/INTERVIEW_NOTES.md) | pitch, trade-offs, limitations, demo script, honesty checklist |
 | [AGENT_FUNDAMENTALS](docs/AGENT_FUNDAMENTALS.md) | agent / tool-calling / evaluation concepts + question bank |
 | [ROADMAP](docs/ROADMAP.md) | done, left, and deferred with reasons |

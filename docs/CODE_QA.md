@@ -481,6 +481,42 @@ become a remote code execution — in a **security** tool.
 
 ---
 
+## 9. `app/memory/` — episodic, semantic, long-term
+
+### Q37. Why SQLite instead of the vector DB the roadmap originally sketched for this phase?
+
+Because the question this project actually needs answered is narrower than
+"semantic similarity." Episodic memory needs to know if *this exact code
+shape* has been seen before — `episodic.make_signature` normalizes whitespace
+and short identifier names and hashes the result, which answers that exactly.
+A vector search would answer it approximately, and would need an embeddings
+call this project cannot make cheaply: Groq, the only LLM provider here, has
+no embeddings API. Adding a second provider key and a database service to
+solve a problem a hash already solves would be the wrong trade.
+
+### Q38. `consolidate_facts()` runs a full table scan. Doesn't that not scale?
+
+Yes, and that is exactly why it is not called from `graph.py`. It is a
+manually-triggered endpoint (`POST /api/memory/consolidate`) precisely
+because it is a `GROUP BY` over the whole episodes table — paying that cost
+on every single review would be paying a bulk-aggregate cost per request for
+a number that only meaningfully changes once new episodes accumulate. Run it
+as a periodic job (a cron, an admin action) the same way you would not
+re-train a model on every inference.
+
+### Q39. "Dismissed" is inferred from the patch generator not changing the code. Isn't that fragile?
+
+It is a real limitation, stated rather than hidden — see
+[INTERVIEW_NOTES.md](INTERVIEW_NOTES.md)'s L5. There is no UI action today
+that records "a human looked at this finding and explicitly rejected it,"
+only "nothing followed it." The two are different signals: a developer who
+simply has not gotten to a finding yet looks identical, in this schema, to
+one who looked and disagreed. The honest fix is a `PATCH` endpoint that
+records an explicit verdict on a finding — not built, because nothing in the
+UI today surfaces a per-finding action to attach it to.
+
+---
+
 ## If nothing else comes to mind
 
 Three principles; everything else derives from them.
