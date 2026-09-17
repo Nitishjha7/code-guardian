@@ -527,7 +527,7 @@ run that did not happen is not a clean result.
 
 ---
 
-## backend/tests/ — 107 tests, no API key
+## backend/tests/ — 161 tests, no API key
 
 All on deterministic seams:
 
@@ -539,9 +539,52 @@ All on deterministic seams:
 | `test_risk.py` | ordering properties, incomplete reviews, the size cap |
 | `test_pr_bot.py` | HMAC, event filtering, file selection, PR-link parsing |
 | `test_test_generator.py` | the selection rule and the routing predicate |
+| `test_token_usage.py` | contextvar isolation across concurrent reviews |
+| `test_metrics.py` | Prometheus counters/histograms |
+| `test_logging_config.py` | the JSON formatter |
+| `test_memory.py` | episodic/semantic/long-term modules and the sqlite store — see the section below |
 
 **Not covered:** the agent prompts themselves (only a real review validates those) and
 the PyGithub calls (they need a token and a live PR).
+
+---
+
+## app/memory/ — episodic, semantic, long-term
+
+Three modules, three different scopes, on purpose — see the package docstring
+in `app/memory/__init__.py` for the full reasoning. The short version: episodic
+is global (a SQL-injection shape looks the same in any repo), long-term is
+per-`repo_id` (explicit preferences, never inferred), semantic sits on top of
+episodic (a fact only exists once enough episodes agree on it).
+
+**Why SQLite, given the sibling self-healing-sql-agent project uses pgvector
+for the same three memory types:** that project already runs Postgres for
+everything else and needs genuine semantic similarity (is this *question*
+similar to a past one) which needs embeddings. This project runs no database
+at all today, and its only LLM provider (Groq) has no embeddings API — adding
+both a database service and a second provider key just for memory would be
+solving a much bigger infrastructure problem than the one that actually
+exists. The similarity question here is narrower: is this *exact code shape*
+(after normalizing whitespace and short identifier names) the same as one seen
+before — which `episodic.make_signature`'s normalized-text hash answers exactly,
+without needing anything approximate.
+
+**Why `consolidate_facts()` is a separate, manually-triggered endpoint
+(`POST /api/memory/consolidate`) rather than running after every review:** it
+is a `GROUP BY` over the whole episodes table, not a per-review cost. Running
+it inline would mean every review pays for a full-table aggregate that only
+changes meaningfully once enough new episodes have accumulated - the same
+reasoning self-healing-sql-agent's `consolidate_facts()` doc note gives for its
+own version of this function, arrived at independently in this project because
+the constraint is the same regardless of which store backs it.
+
+**Verified live, not just unit-tested:** the same SQL-injection snippet
+reviewed twice against real Groq. First review: the finding's `memory_note` is
+empty. Second review: `memory_note` reads back "seen 1 time(s) before (1
+fixed)" - and that survived a full `docker compose up --build` in between,
+proving the named volume (`guardian_memory:/data` in docker-compose.yml)
+actually persists the SQLite file rather than the container's writable layer,
+which a rebuild would have discarded.
 
 ---
 
@@ -612,9 +655,13 @@ kilobytes of paths beat an icon library.
 
 ### `lib/history.js` — why Recent Activity and History are real
 
-The backend is stateless (persistence is Phase 4), so history lives in
-`localStorage`. Every row is therefore a review that **actually ran** — not a
-placeholder.
+A single review is stateless — nothing about the *browser session's* run history
+survives on the backend, which is why it lives in `localStorage` instead. That
+is a different question from `app/memory/`'s cross-review memory (episodic,
+semantic, long-term facts about *findings*), which does persist server-side;
+this file has never needed to change now that it exists, because it was never
+about findings memory, only about "what did I ask this UI to review." Every
+row here is therefore a review that **actually ran** — not a placeholder.
 
 The trade-off is stated rather than hidden: clearing site data wipes it, and it does
 not follow you to another machine. Every read and write is wrapped in `try/catch`,
