@@ -297,6 +297,48 @@ to measure on is a flaky test, which is worse than no test.
 
 ---
 
+### Step 12 — Episodic, semantic and long-term memory
+
+[backend/app/memory/](../backend/app/memory/)
+
+Everything up to this point treats each review as independent — the roadmap's
+own Phase 4 called this out as a deliberate gap: "the review graph is
+stateless today." `app/memory/` closes it, in three pieces scoped
+differently on purpose. **Episodic** records every finding's outcome
+(fixed or dismissed) keyed by a normalized signature of the snippet plus the
+finding title, and a future review of the same shape gets that precedent
+folded into the finding as `memory_note` — before the model that reads it
+ever sees the file. **Semantic** looks across *many* episodes for a finding
+that keeps getting reported and never fixed, and writes that down as a fact —
+deliberately not automatic, triggered instead via
+`POST /api/memory/consolidate`, because it is a full-table aggregate, not a
+per-review cost. **Long-term** is explicit, per-repo review preferences
+(`PUT /api/preferences/{repo}`) — never inferred, the same rule
+self-healing-sql-agent's long-term memory follows for the same reason: a
+preference should only ever be something someone actually said.
+
+**Why SQLite and not the vector DB the original roadmap sketch implied:**
+this project has no database at all otherwise, and Groq (its only LLM
+provider) has no embeddings API. Reaching for pgvector — the choice the
+sibling self-healing-sql-agent project made for its own memory, because it
+already runs Postgres and needs genuine semantic similarity over natural-
+language questions — would mean adding a service and a second provider key
+to answer a narrower question this project actually has: is this *exact*
+code shape (after normalizing whitespace and short identifier names) one
+that has been seen before. A signature match answers that exactly; a vector
+search would answer it approximately, at a real infrastructure cost this
+project does not otherwise pay.
+
+**Verified live, the same way the model gateway above was:** the bundled
+SQL-injection sample reviewed twice against real Groq. The first review's
+finding carries `memory_note: ""`. The second reads back "seen 1 time(s)
+before (1 fixed, 0 reported without a follow-up fix)" — and that survived a
+full `docker compose up --build` in between, which is what actually proves
+the named volume (`guardian_memory:/data`) persists the file rather than the
+container's disposable writable layer.
+
+---
+
 ## 4. How the whole system works now
 
 ### 4.1 Component map
@@ -312,6 +354,7 @@ to measure on is a flaky test, which is worse than no test.
 | Safety | `guardrails_config/validators.py` | secrets + tone on everything outbound |
 | API | `main.py` | `/api/review`, `/api/health`, `/api/graph`, `/webhook/github` |
 | PR bot | `pr_bot.py`, `mcp_clients/github_client.py` | HMAC, diff fetch, comment |
+| Memory | `memory/episodic.py`, `semantic.py`, `long_term.py` | precedent, distilled facts, per-repo preferences |
 | UI | `frontend/src/` | Monaco, findings, patch, markdown, agent log |
 
 ### 4.2 What stops a wrong answer — four layers
@@ -325,7 +368,7 @@ to measure on is a flaky test, which is worse than no test.
 
 | Check | Result |
 |---|---|
-| Unit tests | **107 pass**, no API key needed |
+| Unit tests | **161 pass**, no API key needed |
 | Routing eval, **held-out** set (20 cases, never tuned) | **as-shipped security recall 100%** (0 false negatives); router-only 89%; performance 43% |
 | Routing eval, dev set (20 cases, tuned against) | as-shipped 100%; router-only 90%; performance 50% |
 | Static fusion, vulnerable Python | 8 raw findings → **5** after dedup; **3 confirmed by both engines**; Bandit added 2 SQLi sites the LLM missed |
@@ -369,8 +412,9 @@ band scored a lone Critical finding as *medium* risk.
   tested; the PyGithub calls themselves are not. Needs a `GITHUB_TOKEN` and a live PR.
 - **2e — Check Run status**, to turn "posts a comment" into "can gate a merge". The risk
   score it needs already exists.
-- **Phases 3–5** stay deferred on purpose — each is its own multi-week project (repo
-  ingestion, embeddings, a sandboxed execution runtime), not a node this graph absorbs.
+- **Phases 3 and 5** stay deferred on purpose — each is its own multi-week project
+  (repo ingestion, a sandboxed execution runtime), not a node this graph absorbs.
+  Phase 4 (memory) is done — see Step 12 above.
 
 See [ROADMAP](ROADMAP.md).
 
@@ -383,7 +427,7 @@ See [ROADMAP](ROADMAP.md).
 ```bash
 docker compose up --build                    # UI :3000, API :8010
 
-cd backend && pytest -q                      # 107 tests, no key needed
+cd backend && pytest -q                      # 161 tests, no key needed
 cd backend && python -m evals.run_routing_eval   # needs a key, ~20 calls
 
 curl https://api.groq.com/openai/v1/models -H "Authorization: Bearer $GROQ_API_KEY"
@@ -396,6 +440,7 @@ curl https://api.groq.com/openai/v1/models -H "Authorization: Bearer $GROQ_API_K
 3. `backend/app/agents/static_analysis.py` — the fusion
 4. `backend/app/risk.py` — the triage number
 5. `backend/evals/run_routing_eval.py` — the proof the router works
+6. `backend/app/memory/` — episodic/semantic/long-term, the cross-review layer
 
 ### Env vars that change behaviour
 
@@ -405,4 +450,6 @@ curl https://api.groq.com/openai/v1/models -H "Authorization: Bearer $GROQ_API_K
 | `GUARDIAN_MODEL` | must support tool calling; Groq retires ids, check before demoing |
 | `GITHUB_TOKEN` | PR bot can read and comment |
 | `GITHUB_WEBHOOK_SECRET` | absent → webhook 503, fail closed |
+| `DISABLE_MEMORY_STORE` | forces episodic/semantic/long-term memory off |
+| `MEMORY_DB_PATH` | where the memory sqlite file lives, default `/data/memory.db` |
 | `force_full_audit` (request field) | bypasses routing entirely |
