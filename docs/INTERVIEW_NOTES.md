@@ -111,14 +111,21 @@ Honest answer: **a working system that would need work before production.**
 
 What is real:
 - The Docker stack runs; both entry points (UI and webhook) verified live
-- 107 unit tests, no API key required
+- 161 unit tests, no API key required
 - Routing recall is **measured** on a held-out set, not assumed
 - Seven bugs came out of real runs and tests (§9 and the walkthrough)
+- Cross-review memory (episodic/semantic/long-term) is real, and verified
+  live — see §5's memory note below
 
 What is not:
 - The PR bot has never run against a real repository
 - One language of static scanning (Bandit is Python-only)
-- No persistence — every review is stateless
+- A single review still holds no state of its own between requests — the
+  memory above spans across reviews, but nothing about one review's
+  intermediate graph state survives past that request
+- On the free Render deploy, the memory sqlite file has no persistent disk
+  to live on, so it resets every deploy — fine locally via Docker's named
+  volume, an honest gap on the free tier
 - Eval numbers are from `gpt-oss-20b`, not the default 120b
 
 Saying this distinction out loud lands well. Claiming "production-ready" and then
@@ -255,10 +262,17 @@ makes that visible per finding. Semgrep would be one more `_run_*` function.
 
 Deliberate. The report says "generated, not executed".
 
-### L5 — No memory
+### L5 — Memory is real, but two honest gaps remain
 
-Every review is stateless. If a developer rejects a suggestion, nothing remembers.
-That is Phase 4, and it needs persistence and embeddings.
+`app/memory/` (episodic, semantic, long-term) shipped, and it is not a stub —
+the same SQL-injection sample reviewed twice against real Groq shows the
+second review's finding carrying real precedent from the first. Two things
+still worth naming: it infers "dismissed" from *the patch generator not
+changing the code*, not from an explicit human rejection — there is no UI
+action today that records "a developer looked at this and said no," only
+"nothing followed." And on the free Render deploy the memory file has no
+persistent disk to live on, so it resets on every deploy — true locally via
+Docker's named volume, not true where it is actually hosted.
 
 ### L6 — The PR bot has not run against a real repository
 
@@ -458,7 +472,8 @@ portfolio projects usually lack.
 1. **Performance routing is weak** — 50% dev, 43% held-out, and unbackstopped.
 2. **Bandit is Python-only**, so the multi-language claim is thin.
 3. **The PR bot is unverified against a real repository.**
-4. **No persistence or memory** — every review is stateless.
+4. **Memory's "dismissed" is inferred, not explicit** — and on the free Render
+   deploy it has no persistent disk to survive a redeploy on.
 5. **20 cases per set is small** — the interval around 100% is wide.
 6. **Eval numbers are from 20b**, not the default 120b.
 
