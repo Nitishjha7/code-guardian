@@ -266,9 +266,14 @@ codebase-aware, self-healing agent, not as next sprint's work:
 - **Phase 3: Advanced Intelligence Layer** — Code Quality, Dependency/License,
   and Documentation agents (Test Coverage is promoted above, since it fits
   the existing tool-calling pattern without new infra).
-- **Phase 4: Learning & Memory** — a feedback loop and team-specific rules
-  stored in a vector DB, historical PR pattern analysis. Requires persistent
-  storage and embeddings the current stateless review graph doesn't have.
+- **Phase 4: Learning & Memory** — ✅ done as `app/memory/` (episodic, semantic,
+  long-term; see docs/CODE_NOTES.md). What remains from the original phase
+  description: mining a repo's full PR history to seed memory before its first
+  review, and team-specific *rules* as a first-class object distinct from the
+  key/value preferences shipped. SQLite-backed rather than a vector DB — a
+  single review is still stateless (state.py's `ReviewerState` does not
+  survive past one request); it is memory that spans *across* reviews that
+  changed.
 - **Phase 5: CI/CD Integration (full form)** — Slack/Discord notifications,
   auto-created Jira/Linear tickets. The Check Run gate above is the minimal,
   high-value slice of this phase; the rest is integration surface, not
