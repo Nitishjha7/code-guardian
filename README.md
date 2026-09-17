@@ -44,6 +44,7 @@ review incomplete.
 | **Streams its own progress** | `/api/review/stream` (SSE) yields a `progress` event as each graph node finishes — the routing decision, which auditor is running, when the patch generator starts — instead of one opaque wait. Built on `graph.stream(mode="updates")`, not a second traversal, so it cannot drift from what `/api/review` actually executes. |
 | **Falls over to a second model** | `get_llm()` returns a `with_fallbacks()` chain when `GUARDIAN_FALLBACK_MODELS` is set — a real answer to a real incident this project already had (Groq retired a model id mid-project with no warning). Same-provider only; see [config.py](backend/app/config.py) for why that distinction is stated rather than glossed over. |
 | **Prices its own routing decision** | Every review returns `token_usage` — calls, tokens and USD per model, from Groq's own `usage_metadata`, not an estimate. This is what turns "routing saves cost" from a claim into a number: real runs measured **1 call / $0.0003 on CSS** vs **4 calls / $0.0020 on vulnerable Python** — roughly 7×, for the same reason the latency gap exists. |
+| **Remembers past findings** | `app/memory/` — episodic (has this exact snippet-and-finding pair been seen before, and was it fixed or dismissed), semantic (a finding reported repeatedly and never fixed, distilled into a stated fact), long-term (explicit per-repo review preferences via `PUT /api/preferences/{repo}`). SQLite-backed, not pgvector — this project has no other database and Groq has no embeddings API, so the similarity that matters (an identical code shape) is answered by a normalized signature rather than a vector search. See [docs/CODE_NOTES.md](docs/CODE_NOTES.md). |
 
 ---
 
@@ -110,7 +111,7 @@ Every row below was run, not claimed.
 
 | Check | Result |
 |---|---|
-| Backend unit tests | **122 passing**, no API key required |
+| Backend unit tests | **161 passing**, no API key required |
 | Vulnerable Python sample | 5 security + 2 performance findings; **3 confirmed by both engines**; Bandit caught 2 SQLi sites the LLM missed |
 | Risk score | vulnerable Python **100/100 critical** · slow JS **10/100 low** · CSS **0/100 none** |
 | Failed audit | band `unknown`, *"Audit failed — this code was not checked"*, never a clean pass |
@@ -120,6 +121,7 @@ Every row below was run, not claimed.
 | **Model gateway** | `GUARDIAN_MODEL` set to `llama-3.3-70b-versatile` — the exact id Groq retired mid-project (see "Before you demo" below) — with `GUARDIAN_FALLBACK_MODELS=openai/gpt-oss-20b`. The review still completed against **live Groq**: routed to both auditors, found the SQL injection and the hardcoded key, risk **84/critical**. Without the fallback this is a 502. |
 | **Token/cost tracking** | Live, against real Groq: the vulnerable-Python sample made **4 LLM calls, 5,815 tokens, $0.00195**; the CSS sample (router skips both auditors) made **1 call, 1,104 tokens, $0.00028**. Confirmed isolated across concurrent reviews — two `anyio` worker threads running at once do not see each other's tokens (each gets its own `contextvars` copy). |
 | Compose stack + frontend build | both clean |
+| **Episodic memory, live** | The same SQL-injection snippet reviewed twice against live Groq: the first review's finding carried `memory_note: ""`; the second read back `"Precedent: this exact pattern was seen 1 time(s) before (1 fixed, 0 reported without a follow-up fix)"` — recorded by the first review, persisted in the named Docker volume across a full container rebuild in between. |
 
 **Not verified:** the PR bot against a real repository — that needs a live PR.
 Everything up to the GitHub API call is tested; the PyGithub calls are not.
@@ -171,7 +173,8 @@ backend/app/agents/             Supervisor, Security, Performance, Patch, Tests
 backend/app/agents/static_analysis.py   Bandit fusion: scan, map, dedupe, merge
 backend/app/guardrails_config/  Secrets + tone validators
 backend/app/mcp_clients/        GitHub client (PyGithub)
-backend/tests/                  107 tests for the LLM-free seams
+backend/app/memory/             Episodic, semantic, long-term - SQLite-backed
+backend/tests/                  161 tests for the LLM-free seams
 backend/evals/                  40 labelled cases: 20 dev + 20 held-out
 Dockerfile · render.yaml        Single-service deploy image + Render blueprint
 .github/workflows/ci.yml        Tests, frontend build, and a deploy-image smoke test
@@ -235,13 +238,15 @@ generation, the Check Run gate, and a held-out routing eval.
 single service that serves the API and the built SPA from one origin — no CORS to
 configure, one thing to keep awake. Verified locally: a real review runs through the
 image in 1.5s on the CSS sample (router calls no auditor), at **73 MB** against Render
-free's 512 MB. There is no database because a review holds no state between requests.
-What is left is creating the service and setting `GROQ_API_KEY` — see
+free's 512 MB. A single review still holds no state between requests — the one
+exception is `app/memory/`'s SQLite file, a few hundred KB on a named volume, there
+because *across* reviews is exactly what episodic/semantic/long-term memory needs to
+remember. What is left is creating the service and setting `GROQ_API_KEY` — see
 [BUILD_AND_DEPLOY](docs/BUILD_AND_DEPLOY.md).
 
-Deliberately deferred: repo-wide RAG, vector-DB team memory, and a sandboxed
-self-healing patch loop. Each is its own multi-week project rather than a node this
-graph can absorb — the reasoning is in [ROADMAP](docs/ROADMAP.md).
+Deliberately deferred: repo-wide RAG and a sandboxed self-healing patch loop. Each is
+its own multi-week project rather than a node this graph can absorb — the reasoning is
+in [ROADMAP](docs/ROADMAP.md).
 
 ## License
 
