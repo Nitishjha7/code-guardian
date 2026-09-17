@@ -35,4 +35,3 @@ services:
 
 volumes:
   guardian_memory:
-    restart: unless-stopped
