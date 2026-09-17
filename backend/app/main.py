@@ -84,10 +84,11 @@ class Finding(BaseModel):
     source: str = "llm"
     complexity_before: str = "n/a"
     complexity_after: str = "n/a"
+    memory_note: str = ""
 
     @field_validator(
         "title", "line_hint", "explanation", "recommendation", "source",
-        "complexity_before", "complexity_after",
+        "complexity_before", "complexity_after", "memory_note",
         mode="before",
     )
     @classmethod
