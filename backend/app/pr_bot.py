@@ -173,7 +173,11 @@ def collect_reviews(
         if not snippet.strip():
             continue
         try:
-            state = run_review(source_code=snippet, language=changed.language)
+            state = run_review(
+                source_code=snippet,
+                language=changed.language,
+                repo_id=ref.repo_full_name,
+            )
         except Exception as exc:  # noqa: BLE001
             # One bad file must not sink the whole review; record it as a failed
             # audit so the comment says so rather than omitting the file silently.
