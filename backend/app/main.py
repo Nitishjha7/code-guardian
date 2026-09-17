@@ -26,6 +26,8 @@ from .graph import run_review, run_review_stream
 from .guardrails_config import validators
 from .logging_config import configure_json_logging
 from .mcp_clients import github_client
+from .memory import long_term as memory_long_term
+from .memory.semantic import consolidate_facts
 
 configure_json_logging()
 logger = logging.getLogger("code_guardian")
@@ -358,6 +360,45 @@ async def review_pr(request: ReviewPRRequest) -> ReviewPRResponse:
             for changed, state in results
         ],
     )
+
+
+class PreferenceRequest(BaseModel):
+    key: str = Field(..., max_length=100)
+    value: str = Field(..., max_length=500)
+
+
+class PreferencesResponse(BaseModel):
+    repo_id: str
+    preferences: dict[str, str] = {}
+
+
+@app.put("/api/preferences/{repo_id:path}", response_model=PreferencesResponse)
+def set_preference(repo_id: str, request: PreferenceRequest) -> PreferencesResponse:
+    """Set one explicit review preference for a repo (e.g. ``owner/repo``).
+
+    ``repo_id`` is ``PullRequestRef.repo_full_name`` - the same key
+    ``/api/review-pr`` and the webhook already use to identify a repository,
+    not a new identity invented for this endpoint. See app/memory/long_term.py
+    for why preferences are scoped this way and never inferred.
+    """
+    memory_long_term.set_preference(repo_id, request.key, request.value)
+    return PreferencesResponse(repo_id=repo_id, preferences=memory_long_term.get_preferences(repo_id))
+
+
+@app.get("/api/preferences/{repo_id:path}", response_model=PreferencesResponse)
+def get_preferences(repo_id: str) -> PreferencesResponse:
+    return PreferencesResponse(repo_id=repo_id, preferences=memory_long_term.get_preferences(repo_id))
+
+
+@app.post("/api/memory/consolidate")
+def trigger_consolidation() -> dict[str, int]:
+    """Manually run semantic-fact consolidation over recorded episodes.
+
+    Deliberately not on a schedule inside this process - see the module
+    docstring in app/memory/semantic.py for why this is a periodic, explicit
+    job rather than something that runs on every review.
+    """
+    return {"facts_written": consolidate_facts()}
 
 
 @app.post("/webhook/github", status_code=202)
