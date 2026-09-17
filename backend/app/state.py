@@ -39,6 +39,10 @@ class Finding(TypedDict, total=False):
     # Performance agent only:
     complexity_before: str
     complexity_after: str
+    # Set by app/memory/ - precedent text if this exact finding on this exact
+    # snippet shape has been seen before. Empty string, not absent, when
+    # memory is off or nothing matched - see graph.py's collect_node.
+    memory_note: str
 
 
 class ReviewerState(TypedDict, total=False):
@@ -86,3 +90,11 @@ class ReviewerState(TypedDict, total=False):
     # see app/token_usage.py for why this is tracked per-review rather than
     # per-agent.
     token_usage: dict[str, Any]
+
+    # Cross-review memory - see app/memory/. ``repo_id`` is
+    # PullRequestRef.repo_full_name when this review came from the PR bot
+    # webhook, empty for an ad-hoc /api/review call (no repo, no long-term
+    # scope, and that is fine - preferences are additive, not required).
+    # ``memory_notes`` is precedent text folded into each finding by
+    # collect_node, not a separate node output - see graph.py.
+    repo_id: str
