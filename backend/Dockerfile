@@ -12,8 +12,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY logging.json .
 
-# Non-root: nothing here needs to write to the filesystem.
-RUN useradd --create-home --uid 10001 guardian
+# Non-root, but app/memory/store.py now needs one writable path for its
+# SQLite file (MEMORY_DB_PATH, default /data/memory.db) - everything else
+# in this image is still read-only to the guardian user.
+RUN useradd --create-home --uid 10001 guardian \
+    && mkdir -p /data && chown guardian:guardian /data
 USER guardian
 
 EXPOSE 8000
