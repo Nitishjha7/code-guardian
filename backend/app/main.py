@@ -137,9 +137,8 @@ def _review_response(state: dict[str, Any], fallback_language: str) -> ReviewRes
     """Build the response payload from graph state.
 
     One function so ``/api/review`` and the streaming endpoint's final event
-    read the same fields in the same order - the field list living in two
-    places is exactly the kind of drift that makes a streamed result quietly
-    disagree with the non-streamed one.
+    build the same payload; keeping two field lists in sync is how the two
+    responses drift apart.
     """
     return ReviewResponse(
         language=state.get("language", fallback_language),

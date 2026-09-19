@@ -43,12 +43,10 @@ def set_current_input(source_code: str, language: str) -> None:
 def _run_audit(name: str, audit_fn) -> str:
     """Run one specialist and wrap the result in a success/failure envelope.
 
-    The envelope exists because of the worst bug this system can have: if an
-    audit raises (bad API key, decommissioned model, rate limit) and that is
-    silently turned into "no findings", the review reports **clean code** on
-    code it never actually looked at. A bare JSON array cannot distinguish
-    "audited, found nothing" from "never ran", so every audit reports which of
-    the two happened and the graph refuses to render a failed audit as a pass.
+    A bare JSON array cannot distinguish "audited, found nothing" from "never
+    ran", so an audit that raises (bad key, retired model, rate limit) would be
+    reported as clean code. The envelope carries which of the two happened, and
+    the graph refuses to render a failed audit as a pass.
     """
     source_code, language = _CURRENT_INPUT.get()
     try:
@@ -123,7 +121,7 @@ and why. Another node handles the report."""
 
 # Identifier-shaped terms. The boundaries are lookarounds rather than ``\b``
 # because ``\b`` does not fire between an underscore and a letter, which would
-# miss exactly the names real code uses: DB_PASSWORD, check_password, api_key.
+# miss the names real code uses: DB_PASSWORD, check_password, api_key.
 _HIGH_STAKES_TERMS = re.compile(
     r"(?<![A-Za-z0-9])(?:"
     r"password|passwd|pwd|secret|token|api[_-]?key|apikey|credential|auth|"

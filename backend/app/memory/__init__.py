@@ -4,7 +4,7 @@ A single review holds no state — that is the right default. This package is th
 exception: three things that should outlive one review, because re-deriving the
 same judgement on every PR is worse than remembering it.
 
-The three are scoped differently on purpose:
+The three are scoped differently:
 
 * **episodic** — one row per (code signature, finding, verdict). Global rather
   than per-repo: the same vulnerable shape looks identical in any codebase.

@@ -87,10 +87,9 @@ def score(
 ) -> RiskScore:
     """Compute the review's risk score.
 
-    Performance findings contribute at a discount: a slow query is a cost, a SQL
-    injection is a breach, and a score that let three ``Medium`` performance
-    notes outrank one ``Critical`` vulnerability would be actively misleading to
-    whoever triages on it.
+    Performance findings contribute at a discount (0.4x): a slow query is a
+    cost, a SQL injection is a breach, so three Medium performance notes should
+    not outrank one Critical vulnerability.
     """
     failed = failed_audits or []
     modifier = _size_modifier(source_code)
@@ -123,8 +122,8 @@ def score(
             )
 
     if failed:
-        # The score is computed from findings that were never collected. Saying
-        # "low risk" here would be the silent-pass bug wearing a number.
+        # The score was computed from findings that were never collected, so it
+        # is reported as unknown rather than as a low number.
         return {
             "score": raw,
             "band": "unknown",

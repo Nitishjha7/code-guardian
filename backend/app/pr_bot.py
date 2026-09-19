@@ -25,9 +25,8 @@ from .mcp_clients.github_client import (
 
 logger = logging.getLogger("code_guardian.pr_bot")
 
-# A PR touching auth or database code is exactly the high-stakes path §3a
-# describes, but the bot cannot know that per-file in advance, so it relies on
-# the supervisor's own backstop rather than forcing a full audit on everything.
+# The bot cannot tell per-file which changes are high-stakes, so it leaves that
+# to the supervisor's own backstop instead of forcing a full audit everywhere.
 MAX_FILES = 10
 
 

@@ -69,8 +69,8 @@ _SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ),
 ]
 
-# Placeholders a model is *supposed* to emit when it removes a secret. Flagging
-# these would make the guard cry wolf on exactly the output we want.
+# Placeholders a model emits when it removes a secret. Flagging these would
+# warn about the output we actually want.
 _PLACEHOLDER = re.compile(
     r"(?i)^(?:x{3,}|\*{3,}|\.{3,}|<[^>]+>|\{\{?[^}]+\}?\}|"
     r"your[_-]?\w+|changeme|placeholder|redacted|dummy|example|"

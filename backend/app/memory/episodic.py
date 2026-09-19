@@ -9,7 +9,7 @@ Global, not scoped by repo: a SQL string built with f-string interpolation
 looks the same character-for-character whether it appears in repo A or repo
 B, so siloing episodes per repo would only make each repo's memory colder
 for no benefit. Long-term preferences are the layer that is repo-scoped
-(``long_term.py``) - this one is not, on purpose.
+(``long_term.py``); this one is not.
 """
 
 from __future__ import annotations
@@ -76,16 +76,14 @@ def record_episode_from_result(
     fixed_code: str,
     repo_id: str = "",
 ) -> None:
-    """The one decision function - called once per review from ``app/graph.py``.
+    """Record this review's findings. Called once per review from ``graph.py``.
 
-    A finding counts as "fixed" if the patch generator actually changed the
-    code for it (``fixed_code`` differs from ``source_code``); otherwise it
-    was reported but nothing followed, which is recorded as "dismissed" - not
-    because a human explicitly rejected it, but because that is the only
-    signal this project has of an action *not* being taken. Recording that
-    honestly (rather than skipping unfixed findings) is what makes semantic
-    consolidation possible later: a pattern flagged repeatedly and never
-    acted on is exactly the thing worth surfacing as a fact.
+    A finding counts as "fixed" when the patch generator changed the code
+    (``fixed_code`` differs from ``source_code``), and "dismissed" otherwise.
+    Dismissed does not mean a human rejected it - it is the only signal
+    available for an action not taken. Unfixed findings are recorded rather
+    than skipped so semantic consolidation can pick up patterns that are
+    flagged repeatedly and never acted on.
     """
     was_fixed = bool(fixed_code) and fixed_code != source_code
     verdict = VERDICT_FIXED if was_fixed else VERDICT_DISMISSED

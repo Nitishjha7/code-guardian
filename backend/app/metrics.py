@@ -1,14 +1,11 @@
-"""Prometheus metrics for what this project actually measures elsewhere.
+"""Prometheus metrics.
 
-These are not generic request counters bolted on afterwards — each one mirrors
-a number this README already argues about. If the metric doesn't answer a
-question this project has already asked in prose ("does routing actually save
-cost", "how often does an audit fail"), it does not belong here.
+Each one answers a question the project already asks elsewhere - whether
+routing saves cost, how often an audit fails - rather than being a generic
+request counter.
 
-``prometheus_client`` rather than a hand-rolled exposition format: the text
-format has escaping and type-comment rules that are easy to get subtly wrong,
-and a real Prometheus server is unforgiving about it. This is what every
-production FastAPI service actually uses.
+``prometheus_client`` over a hand-rolled exposition format: the text format has
+escaping and type-comment rules that are easy to get subtly wrong.
 """
 
 from __future__ import annotations
@@ -28,9 +25,8 @@ REVIEWS_TOTAL = Counter(
 REVIEW_DURATION_SECONDS = Histogram(
     "guardian_review_duration_seconds",
     "Wall-clock time for one review, end to end.",
-    # The gap this README's whole §3a argument rests on is roughly 1s
-    # (nothing routed) vs 10s+ (both auditors) - the buckets are chosen to
-    # resolve that gap, not a generic web-latency curve.
+    # Buckets chosen for the gap that matters here - roughly 1s when nothing
+    # routed against 10s+ when both auditors ran - not a generic latency curve.
     buckets=(0.5, 1, 2, 5, 10, 20, 40),
 )
 
@@ -71,10 +67,9 @@ TOKENS_TOTAL = Counter(
 def record_review(state: dict, primary_model: str | None = None) -> None:
     """Update every review-level metric from one finished ``ReviewerState``.
 
-    One function, called once per review (in ``run_review`` and at the end of
-    ``run_review_stream``), rather than scattering ``.inc()`` calls through
-    the graph nodes — the nodes stay exactly what they were before metrics
-    existed, and this is the only place that has to know the metric names.
+    Called once per review from ``run_review`` and ``run_review_stream``,
+    rather than scattering ``.inc()`` calls through the graph nodes: the nodes
+    stay untouched and this is the only place that knows the metric names.
     """
     routed = state.get("routed_to") or []
     route = (

@@ -54,11 +54,10 @@ def _route_after_supervisor(state: ReviewerState) -> str:
 def _unpack_audit(content: object) -> tuple[list[Finding], str | None]:
     """Read one audit's tool result.
 
-    Returns ``(findings, error)``; exactly one of the two is meaningful. Note
-    that anything unparseable counts as an *error*, not as an empty result:
-    LangGraph's ToolNode turns an uncaught exception into a plain-text
-    ToolMessage, and reading that as "no findings" is precisely the silent-pass
-    bug this function exists to prevent.
+    Returns ``(findings, error)``; one of the two is meaningful. Anything
+    unparseable counts as an error rather than an empty result: LangGraph's
+    ToolNode turns an uncaught exception into a plain-text ToolMessage, which
+    read as "no findings" would report unreviewed code as clean.
     """
     try:
         payload = json.loads(content or "")
@@ -237,8 +236,8 @@ def _render_report(state: ReviewerState, diff: str) -> str:
     lines = ["## Code Guardian Review", ""]
 
     if failed:
-        # This banner leads the report on purpose: a reader who skims must not
-        # walk away thinking the code was reviewed and came back clean.
+        # Leads the report so a skimming reader cannot mistake an incomplete
+        # review for a clean one.
         lines += [
             "> **This review is incomplete.** "
             f"{len(failed)} audit(s) failed to run: "

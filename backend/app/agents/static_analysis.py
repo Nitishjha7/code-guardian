@@ -152,10 +152,8 @@ def run_bandit(source_code: str, timeout: int = 30) -> tuple[list[Finding], str 
     executes the code it scans, so running it on an untrusted submission is
     safe; the file is written to a private temp path and removed afterwards.
 
-    A scanner failure returns an error string rather than raising: the LLM half
-    of the audit may still have succeeded, and losing that to a missing optional
-    dependency would be the wrong trade. The caller surfaces the error rather
-    than dropping it.
+    A scanner failure returns an error string rather than raising, since the LLM
+    half of the audit may still have succeeded. The caller surfaces the error.
     """
     if not is_available():
         return [], "bandit is not installed"

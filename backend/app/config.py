@@ -67,10 +67,9 @@ def get_llm(temperature: float = 0.0):
 
     Cached per temperature so callers do not each open their own client.
 
-    The gateway exists because Groq retired ``llama-3.3-70b-versatile``
-    mid-project and every audit started 404ing — a failure no mock had caught.
-    ``with_fallbacks`` rather than try/except at each call site because it
-    returns a Runnable that still answers ``.bind_tools()``, which
+    The fallback chain covers retired model ids, which Groq does without much
+    notice. ``with_fallbacks`` rather than try/except at each call site because
+    it returns a Runnable that still answers ``.bind_tools()``, which
     ``supervisor.py`` depends on.
 
     Fallbacks are other **Groq** ids, so this protects against a dead or
