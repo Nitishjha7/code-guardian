@@ -6,11 +6,9 @@ and at the end how the complete system runs. If you only read one file, read thi
 What the other docs are for:
 [TECHNICAL_SPEC](TECHNICAL_SPEC.md) architecture and design decisions ·
 [CODE_NOTES](CODE_NOTES.md) file-by-file "why this exists" ·
-[CODE_QA](CODE_QA.md) defend your own code, question by question ·
-[INTERVIEW_NOTES](INTERVIEW_NOTES.md) the pitch and Q&A ·
-[AGENT_FUNDAMENTALS](AGENT_FUNDAMENTALS.md) general agent/tool-calling concepts ·
-[ROADMAP](ROADMAP.md) what is left ·
-[BUILD_AND_DEPLOY](BUILD_AND_DEPLOY.md) priorities and deployment.
+[ROADMAP](ROADMAP.md) what is built, what is not, and why ·
+[SETUP](SETUP.md) running it locally ·
+[BUILD_AND_DEPLOY](BUILD_AND_DEPLOY.md) scope and deployment.
 
 ---
 
@@ -160,8 +158,8 @@ Secrets are **redacted, not dropped**, so the reviewer still sees the shape of t
 
 `guardrails-ai` is used when installed but is optional — some of its hub validators pull a
 full torch install, a bad trade for a container that otherwise fits in a few hundred MB.
-`guardrail_report.engine` always names which engine produced the result, so nobody is
-misled about it. **Do not say "Guardrails AI" in an interview without saying this.**
+`guardrail_report.engine` always names which engine produced the result, so a report
+never implies a validator that did not run.
 
 The guard is placeholder-aware: it must not flag the `os.environ[...]` that the patch
 agent is *supposed* to emit when it removes a secret.
@@ -272,8 +270,8 @@ Four behaviours worth knowing:
 Naming honesty: the folder is `mcp_clients/` and the spec said "GitHub MCP Server /
 PyGithub". **This is PyGithub.** Running the MCP server would mean a second container to
 wrap REST calls this backend already makes, and MCP's value — a *model* discovering and
-calling tools at runtime — does not apply to fixed, webhook-driven calls. If you say
-"MCP" about this project, say it about the supervisor.
+calling tools at runtime — does not apply to fixed, webhook-driven calls. The runtime
+tool discovery in this project lives in the supervisor, not here.
 
 ### Step 11 — Regression tests, generated but never run
 

@@ -142,7 +142,7 @@ what shipped.
 Slack/Discord notifications, auto-created Jira/Linear tickets.
 
 The Check Run gate (2e) is the minimal high-value slice of this phase. The rest is
-integration surface, not architecture, and proves nothing in an interview.
+integration surface rather than architecture — it would add reach, not depth.
 
 ### Self-healing patch loop
 
@@ -163,7 +163,7 @@ interacting with an untouched one). But repo ingestion is a project in itself.
 
 ## Known weaknesses, in priority order
 
-Knowing these yourself is the most important thing for an interview.
+Stated here rather than left for a reader to find.
 
 1. **Performance routing is weak** — 50% on the dev set, 43% held-out. The model
    calls the security auditor on code whose only real problem is performance.
@@ -191,7 +191,7 @@ Knowing these yourself is the most important thing for an interview.
 | 4 | Findings-quality eval (labelled vulnerabilities) | 1 day | only routing is measured today, not findings |
 | 5 | Cost/token tracking | 3 hrs | there is currently no cost number worth quoting |
 
-**1 is worth doing before an interview** — it is the only "not verified" caveat
+**1 is the highest-value item left** — it is the only "not verified" caveat
 left. 2 closes the last caveat on the headline number.
 
 ---

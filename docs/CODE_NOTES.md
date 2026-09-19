@@ -4,8 +4,8 @@ The **why** for every file. What the code does is visible by reading it; this
 document holds what reading it does not show — which decision was made, and which
 alternatives were rejected.
 
-The same material in question-and-answer form is in [CODE_QA.md](CODE_QA.md). How
-the whole system runs is in [PROJECT_WALKTHROUGH.md](PROJECT_WALKTHROUGH.md).
+How the whole system runs end to end is in
+[PROJECT_WALKTHROUGH.md](PROJECT_WALKTHROUGH.md).
 
 ---
 
@@ -157,8 +157,8 @@ Same shape. `complexity_before` / `complexity_after` belong to its findings.
 The prompt says explicitly **"Do not report security issues; another agent owns
 those"** — otherwise both auditors report the same thing twice.
 
-This is the project's weaker auditor: routing recall 50% dev, 43% held-out. Details
-in [CODE_QA Q32](CODE_QA.md).
+This is the project's weaker auditor: routing recall 50% dev, 43% held-out — see
+the eval notes in [ROADMAP.md](ROADMAP.md).
 
 ---
 
@@ -354,8 +354,8 @@ patched code.
 ### Why Guardrails AI is optional
 
 Some of its hub validators pull a full torch install.
-`guardrail_report.engine` **always** names which engine ran. If you want to say
-"Guardrails AI" in an interview, this has to be disclosed with it.
+`guardrail_report.engine` **always** names which engine ran, so a report never
+implies a validator that did not execute.
 
 ### It redacts rather than drops
 
@@ -463,7 +463,7 @@ wrapping REST calls this backend already makes, and MCP's real value — a *mode
 discovering and calling tools at runtime — does not apply, because these calls are
 fixed and webhook-driven.
 
-**If you say "MCP" in an interview, say it about `supervisor.py`, not this file.**
+**The runtime tool discovery in this project is in `supervisor.py`, not here.**
 
 ---
 

@@ -406,30 +406,15 @@ export function SettingsPage({ backend }) {
           )}
         </div>
 
-        <div className={`${CARD} p-5 lg:col-span-2`}>
-          <h3 className="text-sm font-medium text-slate-100">Deployment</h3>
-          <dl className="mt-4 grid gap-3 text-xs sm:grid-cols-2">
-            <Field label="Platform" value="Google Cloud Run · asia-south1" />
-            <Field label="Build" value="Cloud Build on push to main" />
-            <Field label="Memory / CPU" value="512 MiB · 1 vCPU" />
-            <Field label="Scaling" value="min 0 · max 3 · concurrency 10" />
-          </dl>
-          <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] leading-relaxed text-slate-500">
-            <b className="text-slate-400">min-instances 0</b> means the service scales
-            to zero and costs nothing idle — the trade is a few seconds of cold start on
-            the first request. Concurrency is capped at 10 rather than the default 80,
-            which would exhaust 512 MiB under parallel LLM calls. Memory was chosen from
-            a measured 73 MB peak, not guessed.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <ExtLink href="https://github.com/Nitishjha7/code-guardian">
-              Source on GitHub
-            </ExtLink>
-            <ExtLink href="https://github.com/Nitishjha7/code-guardian/blob/main/docs/BUILD_AND_DEPLOY.md">
-              How it is deployed
-            </ExtLink>
-          </div>
-        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <ExtLink href="https://github.com/Nitishjha7/code-guardian">
+          Source on GitHub
+        </ExtLink>
+        <ExtLink href="https://github.com/Nitishjha7/code-guardian/blob/main/docs/BUILD_AND_DEPLOY.md">
+          How this is deployed
+        </ExtLink>
       </div>
     </div>
   )

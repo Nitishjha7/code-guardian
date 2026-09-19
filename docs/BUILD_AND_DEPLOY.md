@@ -1,51 +1,49 @@
-# Build & Deploy Guide
+# Build & Deploy
 
-What to prioritise when building this as an interview showcase, and how to
-deploy it. The interview *answers* live in [INTERVIEW_NOTES.md](INTERVIEW_NOTES.md);
-this doc is about build order and deployment.
+How the project was scoped and how it is deployed. Architecture is in
+[TECHNICAL_SPEC.md](TECHNICAL_SPEC.md); the build narrative in
+[PROJECT_WALKTHROUGH.md](PROJECT_WALKTHROUGH.md).
 
-## Purpose
+## Scope
 
-The goal is to **show the project in an interview**, so depth and explainability
-matter more than breadth. Phases 3–5 do not need building — having them written
-down as a considered roadmap does the job.
+Depth over breadth. Three or four pieces built properly, with their limits
+measured and written down, beat a dozen half-finished ones — so Phases 3–5 exist
+as a reasoned [roadmap](ROADMAP.md) rather than as shallow implementations.
 
-## What to build, in priority order
-
-### 1. Core — build these, well
+### What was built, and why it came first
 
 - **LangGraph multi-agent graph** — Security, Performance and Patch Generator
-  wired through `StateGraph`. The most important part.
-- **Tool-calling supervisor** — do not make it a fixed fan-out. Expose the
-  specialists as `@tool`, bind with `llm.bind_tools([...])`, loop via `ToolNode`
-  and a conditional edge. **This is the differentiating piece**: it is the one
-  place in the portfolio where the *model* decides control flow (the other two
-  projects let LangGraph edges decide). "Have you built ReAct-style tool
-  calling?" is a common agentic-AI question, and without this the answer is no.
-  Defence in [TECHNICAL_SPEC §3a](TECHNICAL_SPEC.md).
-- **FastAPI backend** — `/api/review` accepting code and driving the graph.
-- **React UI** — editor, Review button, result cards.
-- **Output guardrails** — validate that diffs and comments leak no secrets.
-  Shows production thinking.
-- **Clean architecture** — a real state schema, separated nodes, and docs.
+  wired through `StateGraph`. The core of the system.
+- **Tool-calling supervisor** — deliberately not a fixed fan-out. The specialists
+  are exposed as `@tool`, bound with `llm.bind_tools([...])`, and looped via
+  `ToolNode` plus a conditional edge. This is the one place where the *model*
+  decides control flow rather than a graph edge, which is the project's central
+  argument — see [TECHNICAL_SPEC §3a](TECHNICAL_SPEC.md).
+- **FastAPI backend** — `/api/review` accepts a submission and drives the graph.
+- **React UI** — editor, review trigger, result cards, live run trace.
+- **Output guardrails** — every outbound diff and comment is scanned for
+  credentials before it leaves.
+- **A real state schema** — separated nodes, explicit reducers, and the
+  `ok`/`error` envelope that keeps a failed audit distinct from a clean one.
 
-### 2. Nice-to-have — built
+### Built beyond the original scope
 
-- **GitHub PR Bot (Phase 2)** ✅ — a webhook listener that triggers on PR
-  open/update, fetches the diff, and posts a review comment. A strong
-  differentiator: real automation rather than a toy demo. Setup in the
-  [README](../README.md#github-pr-bot-phase-2).
+- **GitHub PR bot** — a webhook listener that reviews the lines a pull request
+  adds and posts a comment. Verified on a real PR; setup in the
+  [README](../README.md#github-pr-bot).
+- **Held-out routing eval** — 40 labelled cases across two sets, one never tuned
+  against, with the exit code gated on recall.
+- **Streaming, an LLM gateway, token/cost tracking and structured logging** —
+  each added in response to something the project actually hit.
 
-### 3. Skip — leave in the roadmap
+### Deliberately deferred
 
-- Phase 3 (Code Quality, Dependency/License, Documentation agents)
-- Phase 4 (feedback loop, vector-DB memory, team-specific rules)
-- Phase 5 (CI/CD auto-block, chat alerts, auto-ticketing)
+Phases 3–5 (extra specialist agents, a feedback loop with vector memory, full
+CI/CD integration) are documented in [ROADMAP.md](ROADMAP.md) with the reasoning
+for each. Each is its own multi-week project rather than a node this graph can
+absorb.
 
-These are written up in [ROADMAP.md](ROADMAP.md) with the reason each is
-deferred. An interviewer sees that you thought ahead without burning weeks.
-
-## Before you demo: Groq retires model ids
+## Groq retires model ids
 
 `llama-3.3-70b-versatile` (in the original spec) no longer exists on Groq — it
 404s. Check first:
@@ -58,8 +56,8 @@ Put a working id in `GUARDIAN_MODEL`. The default is `openai/gpt-oss-120b`, and
 **it must support tool calling** — the supervisor depends on it.
 
 Also watch the daily token quota. The free tier is 200k tokens/day *per model*;
-heavy testing the day before a demo will exhaust it. Switching to
-`openai/gpt-oss-20b` gets you a separate bucket.
+heavy testing will exhaust it. Switching to
+`openai/gpt-oss-20b` uses a separate bucket.
 
 ## Build order (status)
 
@@ -72,37 +70,59 @@ heavy testing the day before a demo will exhaust it. Switching to
 7. ✅ GitHub PR bot — `/webhook/github` with HMAC auth, `pr_bot.py`
 8. ✅ Bandit fusion, risk score, test generation, held-out routing eval
 
-## How this was built
+## Method
 
-The code was written with heavy use of an AI coding assistant (Claude), working
-through the order above, with each stage run against the real Groq API before
-moving on.
+Built stage by stage in the order above, with each stage run against the real Groq
+API before the next one started. That ordering was not incidental — three of the
+six decisions documented below were only discovered *because* a stage was exercised
+for real rather than assumed to work. The failed-audit bug, in particular, was
+invisible until a retired model id made every audit 404 at once.
 
-What that did **not** decide: that the supervisor should route instead of fanning
-out and that the routing claim had to be measured rather than asserted, that a
-second eval set had to be held out and never tuned against, that a failed audit
-reporting "no issues found" was the worst possible bug for an auditing tool, that
-the diff should be computed with `difflib` rather than requested from a model, and
-that "MCP" must not be claimed for a folder that runs PyGithub.
+Implementation was done with AI assistance, which is worth naming plainly because
+it changes what the interesting work actually was. Generating a LangGraph node or a
+React card is no longer the hard part. The research and the judgement calls are:
 
-Those judgements are the project, and the notes below are where they are defended.
+**Architecture** — a tool-calling supervisor that *routes* was chosen over the more
+common static fan-out, after reading how ReAct-style loops behave when the model
+owns control flow. The trade is real: routing can under-call, which is why
+`looks_high_stakes()` exists as a deterministic backstop.
 
-## Implementation notes worth knowing before the interview
+**Evaluation design** — routing accuracy is a claim, so it needed a measurement. A
+second set of 20 cases was written and **never tuned against**, and the rule that a
+failing case may change neither itself nor the prompt it failed on was set before
+any numbers were read. That constraint is what makes the 100% held-out recall worth
+quoting; without it the number would be training signal.
 
-Six places where the code deliberately departs from the naive reading of the
-spec. Each is a decision to defend, not an accident.
+**Failure semantics** — deciding that *"did not run"* must be a distinct state from
+*"ran and found nothing"*, and that a review with a failed audit is `unknown` rather
+than `0/100`. That is a domain judgement about auditing tools, not a coding task.
 
-- **A failed audit is never rendered as "no issues found".** Lead with this; it
-  was a real bug. The audits are tools, and LangGraph's `ToolNode` turns an
-  uncaught exception into a plain ToolMessage — so when the Groq model id was
-  retired and every audit 404'd, the system reported **0 findings on code with a
-  Critical SQL injection**. For an auditing tool that is the worst possible
-  failure: silence became indistinguishable from a pass. Fixed with a
-  `{"ok": bool, ...}` envelope per tool, `failed_audits` / `audit_errors` in
-  state, and a report that leads with an "incomplete review" banner. Four tests
-  pin it down. Good answer to *"how do you know your agent actually worked?"* —
-  you don't, unless "did not run" is a distinct state from "ran and found
-  nothing".
+**Knowing what not to claim** — the `mcp_clients/` folder runs PyGithub, and the
+docs say so rather than letting the folder name imply an MCP integration that does
+not exist. Similarly, `guardrail_report.engine` always names the engine that
+actually ran.
+
+**Measurement over assertion throughout** — 73 MB peak memory, 698 MB on the
+sibling project, 4 calls vs 1 on the routing contrast, $0.0025 per review. Every
+number in these docs came from running the thing, and the ones that could not be
+measured are marked as unmeasured.
+
+The sections below are where each of those decisions is set out in full.
+
+## Where the implementation departs from the obvious reading
+
+Six deliberate decisions, each with a reason worth recording.
+
+- **A failed audit is never rendered as "no issues found".** This was a real bug.
+  The audits are tools, and LangGraph's `ToolNode` turns an uncaught exception
+  into a plain ToolMessage — so when the Groq model id was retired and every
+  audit 404'd, the system reported **0 findings on code with a Critical SQL
+  injection**. For an auditing tool that is the worst possible failure: silence
+  became indistinguishable from a pass. Fixed with a `{"ok": bool, ...}` envelope
+  per tool, `failed_audits` / `audit_errors` in state, and a report that leads
+  with an "incomplete review" banner. Four tests pin it down. The general form of
+  the lesson: an agent's output is only trustworthy if *"did not run"* is a
+  distinct state from *"ran and found nothing"*.
 
 - **The diff is computed with `difflib`, not asked for from the LLM.** Models
   emit unified diffs with wrong hunk headers and line counts, and such a patch
@@ -114,16 +134,16 @@ spec. Each is a decision to defend, not an accident.
   container that otherwise fits in a few hundred MB. The fallback is a real
   guard (11 secret patterns, placeholder-aware so it does not flag the
   `os.environ[...]` a fix is *supposed* to emit), and `guardrail_report.engine`
-  always names which engine ran. **Do not claim "Guardrails AI" without saying
-  this.**
+  always names which engine ran — so the report never implies a validator that
+  did not execute.
 
 - **The "MCP client" layer is PyGithub, not an MCP server.** The folder is named
-  `mcp_clients/` because the spec said so. Running the MCP server would mean a
-  second container wrapping REST calls this backend already makes, and MCP's
+  `mcp_clients/` after the original spec, and the name is misleading enough to be
+  worth stating outright. Running a real MCP server here would mean a second
+  container wrapping REST calls this backend already makes, and MCP's actual
   value — a *model* discovering and calling tools at runtime — does not apply to
-  fixed, webhook-driven calls. **If you say "MCP", say it about
-  `supervisor.py`.** Claiming an integration you did not build is the one thing
-  that will sink you here.
+  fixed, webhook-driven calls. The runtime tool discovery in this project is in
+  `supervisor.py`, not here.
 
 - **The router has a static backstop.** `looks_high_stakes()` force-runs both
   auditors when the input obviously touches auth, DB or exec surfaces, so recall
@@ -272,7 +292,7 @@ long-running webhook process do not fit that runtime.
 
 Hugging Face Spaces is a viable single-container alternative (Docker SDK, free,
 secrets in Settings), with two caveats: free Spaces sleep after inactivity, and a
-public Space exposes `/api/review` to anyone, which spends your Groq quota.
+public Space exposes `/api/review` to anyone, which spends the Groq quota behind it.
 
 ### GitHub webhook
 

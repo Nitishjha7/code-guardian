@@ -122,7 +122,7 @@ Every row below was run, not claimed.
 | Webhook auth | valid HMAC **202** · tampered **401** · missing **401** · no secret **503** |
 | API errors | missing key **503** · rejected key **502** · rate limited **429** |
 | `/api/review/stream` | CSS sample: 4 progress events, no `tools` event (nothing was routed) · vulnerable-Python sample: 7 events including the supervisor→tools loop running twice, before the same `done` payload `/api/review` returns |
-| **Model gateway** | `GUARDIAN_MODEL` set to `llama-3.3-70b-versatile` — the exact id Groq retired mid-project (see "Before you demo" below) — with `GUARDIAN_FALLBACK_MODELS=openai/gpt-oss-20b`. The review still completed against **live Groq**: routed to both auditors, found the SQL injection and the hardcoded key, risk **84/critical**. Without the fallback this is a 502. |
+| **Model gateway** | `GUARDIAN_MODEL` set to `llama-3.3-70b-versatile` — the exact id Groq retired mid-project — with `GUARDIAN_FALLBACK_MODELS=openai/gpt-oss-20b`. The review still completed against **live Groq**: routed to both auditors, found the SQL injection and the hardcoded key, risk **84/critical**. Without the fallback this is a 502. |
 | **Token/cost tracking** | Live, against real Groq: the vulnerable-Python sample made **4 LLM calls, 5,815 tokens, $0.00195**; the CSS sample (router skips both auditors) made **1 call, 1,104 tokens, $0.00028**. Confirmed isolated across concurrent reviews — two `anyio` worker threads running at once do not see each other's tokens (each gets its own `contextvars` copy). |
 | Compose stack + frontend build | both clean |
 | **Deployed service, live on Cloud Run** | Every endpoint answers on the public URL — SPA, `/api/health`, `/api/graph`, `/metrics`, `/api/review`, and SSE `/api/review/stream` (events arrive per node, not buffered). A real review returned 5 findings at risk **50/high** for **$0.0025**. And the routing argument holds in production: the same service spent **4 calls / $0.00252** on vulnerable Python and **1 call / $0.00019** on CSS, routing to no auditor at all — **~13× cheaper on the file that needed nothing**. |
@@ -231,9 +231,6 @@ runs and tests found.
 |---|---|
 | [TECHNICAL_SPEC](docs/TECHNICAL_SPEC.md) | architecture, graph topology, §3a routing argument, deviations |
 | [CODE_NOTES](docs/CODE_NOTES.md) | file-by-file *why this exists* |
-| [CODE_QA](docs/CODE_QA.md) | 39 questions to defend the code, with answers |
-| [INTERVIEW_NOTES](docs/INTERVIEW_NOTES.md) | pitch, trade-offs, limitations, demo script, honesty checklist |
-| [AGENT_FUNDAMENTALS](docs/AGENT_FUNDAMENTALS.md) | agent / tool-calling / evaluation concepts + question bank |
 | [ROADMAP](docs/ROADMAP.md) | done, left, and deferred with reasons |
 | [SETUP](docs/SETUP.md) · [BUILD_AND_DEPLOY](docs/BUILD_AND_DEPLOY.md) | running it, shipping it |
 

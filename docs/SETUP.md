@@ -133,4 +133,4 @@ git remote set-url origin https://github.com/Nitishjha7/code-guardian.git
 
 - [Project Walkthrough](PROJECT_WALKTHROUGH.md) — the whole system in one file
 - [Technical Specification](TECHNICAL_SPEC.md) — architecture and graph topology
-- [Build & Deploy Guide](BUILD_AND_DEPLOY.md) — deployment and interview prep
+- [Build & Deploy](BUILD_AND_DEPLOY.md) — scope, decisions and deployment
