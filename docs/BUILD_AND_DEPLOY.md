@@ -213,13 +213,46 @@ already defaults to a relative `/api`, so no frontend code changed.
 The SPA keeps its page in the URL **hash**, so `StaticFiles(html=True)` is all the
 fallback needed — there is no path-based route for the server to 404 on.
 
+### The PR bot, verified on a real pull request
+
+The review API and the webhook path are different integrations. The second one had
+never run against a real repository until the service was deployed.
+
+[**PR #1**](https://github.com/Nitishjha7/code-guardian/pull/1) adds
+`examples/vulnerable_user_service.py` — SQL injection three ways, shell injection,
+`pickle.loads` on untrusted input, `eval()` on caller input, hardcoded credentials, a
+leaked file handle. The deployed bot
+[reviewed it](https://github.com/Nitishjha7/code-guardian/pull/1#issuecomment-5740503341):
+
+- **Risk 100/100 CRITICAL**, "this should block the merge"
+- **11 security / 5 performance** findings, 6 of them Critical
+- Bandit's B403 and B404 fused in beside the LLM findings
+- A complete suggested patch — parameterised queries, `IN`-clause batching, context
+  managers, an allow-list on the report filename
+
+**The guardrail caught the bot's own output.** The patch renders the hardcoded
+password as `DB_PASSWORD = "[REDACTED-BY-GUARDRAIL]"` — the outbound scanner stripped
+a secret from the comment before it reached a public PR. That path only runs on the
+webhook route and had never been exercised for real.
+
+Webhook auth, checked both directions against the live service: correctly signed body
+→ **202 `{"status":"pong"}`**, tampered signature → **401 `signature mismatch`**.
+
+Four failures had to be cleared first, none of which reproduce locally: the Secret
+Manager IAM grant, a trailing newline in a pasted secret, the webhook's default
+`x-www-form-urlencoded` content type (the signature is over the raw body, so the
+form encoding breaks it), and request-based billing freezing the background review
+task the instant the 202 returned. The last one is the interesting one — it fails
+*silently*, with the log ending at `Queued review` and no error after it.
+
 ### Two things the deployed service does not do
 
-**The PR bot is inactive.** `GITHUB_TOKEN` and `GITHUB_WEBHOOK_SECRET` are not set on
-Cloud Run, so `/webhook/github` returns 503 and processes nothing. That is the
-intended fail-closed behaviour, not a bug — a public URL that runs LLM calls and
-writes comments is a denial-of-wallet vector. The review UI works fully. Adding the
-two secrets later activates it.
+**The Check Run does not post.** Everything else on the webhook path works — see the
+PR bot section below — but `create_check_run` returns 403. GitHub's fine-grained
+tokens have no `Checks` permission; it is App-only. A classic PAT with `checks:write`,
+or packaging this as a GitHub App, would close it. The bot catches the failure and
+posts its review comment regardless, which is the right failure mode: the merge gate
+is missing, the review is not.
 
 **Cross-review memory resets on cold start.** A review is still one graph invocation
 holding no state of its own between requests, but `app/memory/` persists

@@ -113,6 +113,10 @@ What is real:
 - **It is deployed and reachable** — https://code-guardian-906520260355.asia-south1.run.app
   on Cloud Run, auto-deployed from `main`. A review on the live URL returned 5
   findings at risk 50/high for $0.0025
+- **The PR bot has run on a real pull request** —
+  [PR #1](https://github.com/Nitishjha7/code-guardian/pull/1), 11 security / 5
+  performance findings, risk 100/100 CRITICAL, a full patch, and the guardrail
+  redacting a hardcoded password out of the bot's own comment
 - The Docker stack runs; both entry points (UI and webhook) verified live
 - 161 unit tests, no API key required
 - Routing recall is **measured** on a held-out set, not assumed
@@ -121,7 +125,8 @@ What is real:
   live — see §5's memory note below
 
 What is not:
-- The PR bot has never run against a real repository
+- The Check Run call is still unverified — GitHub's fine-grained tokens have no
+  `Checks` permission, so `create_check_run` 403s. The comment still posts
 - One language of static scanning (Bandit is Python-only)
 - A single review still holds no state of its own between requests — the
   memory above spans across reviews, but nothing about one review's
@@ -474,7 +479,8 @@ portfolio projects usually lack.
 
 1. **Performance routing is weak** — 50% dev, 43% held-out, and unbackstopped.
 2. **Bandit is Python-only**, so the multi-language claim is thin.
-3. **The PR bot is unverified against a real repository.**
+3. **The Check Run is unverified** — fine-grained tokens cannot grant `Checks`;
+   the comment posts but the merge gate never reaches GitHub.
 4. **Memory's "dismissed" is inferred, not explicit** — and on Cloud Run's
    ephemeral filesystem it does not survive a scale-to-zero.
 5. **20 cases per set is small** — the interval around 100% is wide.

@@ -126,9 +126,13 @@ Every row below was run, not claimed.
 | **Token/cost tracking** | Live, against real Groq: the vulnerable-Python sample made **4 LLM calls, 5,815 tokens, $0.00195**; the CSS sample (router skips both auditors) made **1 call, 1,104 tokens, $0.00028**. Confirmed isolated across concurrent reviews — two `anyio` worker threads running at once do not see each other's tokens (each gets its own `contextvars` copy). |
 | Compose stack + frontend build | both clean |
 | **Deployed service, live on Cloud Run** | Every endpoint answers on the public URL — SPA, `/api/health`, `/api/graph`, `/metrics`, `/api/review`, and SSE `/api/review/stream` (events arrive per node, not buffered). A real review returned 5 findings at risk **50/high** for **$0.0025**. And the routing argument holds in production: the same service spent **4 calls / $0.00252** on vulnerable Python and **1 call / $0.00019** on CSS, routing to no auditor at all — **~13× cheaper on the file that needed nothing**. |
+| **PR bot, on a real pull request** | [**PR #1**](https://github.com/Nitishjha7/code-guardian/pull/1) — the deployed bot reviewed a deliberately vulnerable file and [posted this](https://github.com/Nitishjha7/code-guardian/pull/1#issuecomment-5740503341): **11 security / 5 performance** findings, risk **100/100 CRITICAL**, 6 Critical (3 SQL injections, shell injection, `pickle.loads`, `eval()`), Bandit's B403/B404 fused in alongside, and a complete working patch. **The outbound guardrail redacted a hardcoded password out of the bot's own comment** before it reached a public PR. Webhook HMAC verified both ways: valid signature **202**, tampered **401**. |
 | **Episodic memory, live** | The same SQL-injection snippet reviewed twice against live Groq: the first review's finding carried `memory_note: ""`; the second read back `"Precedent: this exact pattern was seen 1 time(s) before (1 fixed, 0 reported without a follow-up fix)"` — recorded by the first review, persisted in the named Docker volume across a full container rebuild in between. |
 
-**Not verified:** the PR bot against a real repository — that needs a live PR.
+**Not verified:** the Check Run call. GitHub's fine-grained tokens have no `Checks`
+permission — it is App-only — so `create_check_run` returns 403. The verdict logic is
+tested and the failure is caught, so the review comment still posts; closing this
+needs a classic PAT with `checks:write` or packaging the bot as a GitHub App.
 Everything up to the GitHub API call is tested; the PyGithub calls are not.
 
 ---

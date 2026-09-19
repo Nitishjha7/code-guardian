@@ -11,11 +11,11 @@ summarises it; [TECHNICAL_SPEC §7](TECHNICAL_SPEC.md) details the deferred item
 |---|---|---|
 | 1 | **Local Code Review Studio** — LangGraph nodes, tool-calling supervisor, `/api/review`, React UI | ✅ done |
 | 2 | **GitHub PR Bot** — HMAC webhook, PyGithub client, PR comment | ✅ done |
-| 2a | Verification against a real GitHub repo/PR | ⬜ **blocked on a live PR** |
+| 2a | Verification against a real GitHub repo/PR | ✅ [**verified on PR #1**](https://github.com/Nitishjha7/code-guardian/pull/1) |
 | 2b | Static analysis (Bandit) fused into `security_audit` | ✅ done |
 | 2c | Risk score on every review | ✅ done |
 | 2d | Test Generation Agent | ✅ done |
-| 2e | GitHub Check Run status (gates merges on the risk score) | ✅ done |
+| 2e | GitHub Check Run status (gates merges on the risk score) | ⚠️ built, blocked on token scope — see below |
 | 2f | Streaming (`/api/review/stream`), model gateway fallback, token/cost tracking, JSON logging | ✅ done |
 | 2g | Cross-review memory — episodic, semantic, long-term (`app/memory/`) | ✅ done |
 | 2h | **Deployed** — Cloud Run, `asia-south1`, auto-deploy on push to `main` | ✅ [live](https://code-guardian-906520260355.asia-south1.run.app) |
@@ -34,6 +34,7 @@ Everything here was actually run, not claimed.
 |---|---|
 | Unit tests | **161 pass**, no API key needed |
 | **Deployed service, live** | A real review against the Cloud Run URL: **5 findings** (SQL injection, repeated DB connection, unclosed connection, missing index, `SELECT *`), risk **50/high**, **$0.0025** for the request. `/api/health` reports `groq_key_configured: true` and the fallback model configured — the Secret Manager binding and the gateway both work in production, not just locally |
+| **PR bot, on a real PR** | [PR #1](https://github.com/Nitishjha7/code-guardian/pull/1): **11 security / 5 performance** findings, risk **100/100 CRITICAL**, a full suggested patch, and the outbound guardrail redacting a hardcoded password out of the bot's own comment. Webhook HMAC verified end to end — valid signature **202**, tampered signature **401** |
 | Episodic memory, live | The same SQL-injection snippet reviewed twice against live Groq: `memory_note` empty on the first pass, `"seen 1 time(s) before (1 fixed)"` on the second — persisted across a full container rebuild via the named Docker volume. |
 | Routing eval, **held-out** (20 cases, never tuned against) | as-shipped security recall **100%**, 0 false negatives; router-only 89%; performance 43% |
 | Routing eval, dev (20 cases, tuned against) | as-shipped 100%; router-only 90%; performance 50% |
@@ -46,9 +47,9 @@ Everything here was actually run, not claimed.
 | API errors | 503 · 502 · 429 |
 | Frontend | production build clean |
 
-**Not verified:** the PR bot against a real repository (needs a live PR), and the
-quality of the agent prompts against a labelled dataset — only routing is
-measured, not the findings themselves.
+**Not verified:** the quality of the agent prompts against a labelled dataset — only
+routing is measured, not the findings themselves. The Check Run call is also still
+unverified against GitHub (see 2e) — the fine-grained token cannot grant that scope.
 
 The eval numbers are from `openai/gpt-oss-20b`, not the default 120b, because the
 120b daily quota was exhausted that day. Re-running on 120b is outstanding.
@@ -57,22 +58,50 @@ The eval numbers are from `openai/gpt-oss-20b`, not the default 120b, because th
 
 ## Remaining work
 
-### 2a — Verification against a real PR ⬜ **blocked**
+### 2a — Verification against a real PR ✅ **done**
 
-Needs a live pull request. The token is configured and can read the repo, but the
-repo has no PRs yet.
+**[PR #1](https://github.com/Nitishjha7/code-guardian/pull/1)** — the bot reviewed a
+deliberately vulnerable file (`examples/vulnerable_user_service.py`) on a real pull
+request against the deployed Cloud Run service, and
+[posted this review](https://github.com/Nitishjha7/code-guardian/pull/1#issuecomment-5740503341).
 
-Everything up to the GitHub API call is tested — HMAC, event filtering, file
-selection, added-line extraction. **The PyGithub calls themselves are not.**
+What it found, unprompted:
 
-Steps are in the [README](../README.md#github-pr-bot). After adding the webhook,
-GitHub sends a `ping` immediately; Recent Deliveries should show
-`202 {"status":"pong"}`, which is the fastest confirmation that both sides hold
-the same secret.
+| | |
+|---|---|
+| Risk | **100/100 CRITICAL** — "this should block the merge" |
+| Findings | **11 security**, **5 performance** |
+| Critical | 3 SQL injections, shell injection, `pickle.loads` on untrusted input, `eval()` on caller input |
+| High | hardcoded API token, hardcoded DB password, N+1 query pattern |
+| Bandit fusion | B403 (pickle) and B404 (subprocess) surfaced alongside the LLM findings |
+| Patch | a full working diff — parameterised queries, `IN`-clause batching, context managers, an allow-list on the report filename |
 
-The Check Run (2e) is also unverified for the same reason — the code decides the
-verdict and 8 tests cover that logic, but the `create_check_run` call itself has
-never reached GitHub. The token additionally needs **checks:write**.
+**The guardrail caught its own output.** The suggested patch renders the hardcoded
+password as `DB_PASSWORD = "[REDACTED-BY-GUARDRAIL]"` — the outbound scanner stripped
+the secret from the bot's own comment before it was posted to a public PR. That path
+had never been exercised against a real repository before.
+
+Four things had to be fixed to get here, each one only visible against the real
+thing — they are written up in the Troubleshooting section of
+[`../../DEPLOYMENT.md`](../../DEPLOYMENT.md).
+
+### 2e — Check Run ⚠️ **built, blocked on token scope**
+
+The verdict logic is implemented and covered by 8 tests, and the bot attempts the call
+on every review. On PR #1 it failed with:
+
+```
+POST /repos/Nitishjha7/code-guardian/check-runs → 403
+"Resource not accessible by personal access token"
+```
+
+GitHub's **fine-grained** tokens do not offer a `Checks` permission at all — it is
+reserved for GitHub Apps. A classic PAT with `checks:write`, or packaging this as a
+GitHub App, is what would close it.
+
+This is handled gracefully rather than fatally: the Check Run failure is caught, and
+the review comment still posts. A partially-working integration that still delivers
+its main output is the right failure mode here.
 
 ---
 
