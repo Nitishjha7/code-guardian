@@ -221,6 +221,10 @@ process do not fit that runtime. Render would fit this project (73 MB against it
 512 MB cap) but not the sibling adaptive-crag (698 MB), so Cloud Run was chosen to
 keep all three on one platform.
 
-Still worth doing: `GITHUB_TOKEN` and `GITHUB_WEBHOOK_SECRET` are not set on the
-deployed service, so the PR bot is inactive there. The review UI works fully; the
-webhook fails closed with a 503, which is the intended behaviour rather than a bug.
+`GITHUB_TOKEN` and `GITHUB_WEBHOOK_SECRET` are both set from Secret Manager, so the
+PR bot is live — verified on [PR #1](https://github.com/Nitishjha7/code-guardian/pull/1),
+see 2a above. The one setting that is *not* the Cloud Run default: **billing is
+instance-based, not request-based**. Request-based throttles CPU as soon as a response
+returns, which silently freezes the bot's background review — the log stops at
+`Queued review` and never continues. With `min-instances 0` the cost difference is
+negligible.
