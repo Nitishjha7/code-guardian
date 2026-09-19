@@ -32,8 +32,12 @@ export default function ReviewPanel({
   loading,
   prLoading,
   tokenReady,
+  // Which tab to open on. The Pull Requests page passes "pr" so the panel lands
+  // on the PR input instead of the code editor — opening that page on a code
+  // editor made it look like the wrong page had loaded.
+  initialTab = 'paste',
 }) {
-  const [tab, setTab] = useState('paste')
+  const [tab, setTab] = useState(initialTab)
   const [prUrl, setPrUrl] = useState('')
   const fileInput = useRef(null)
 

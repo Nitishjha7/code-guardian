@@ -103,16 +103,30 @@ export default function App() {
     }
   }
 
+  // Clears the editor as well as the results. An earlier version only reset the
+  // result panels, which on the Review page looked like the button did nothing:
+  // the same code was still loaded and the panel it cleared was usually already
+  // empty.
   function newReview() {
+    setCode('')
+    setLanguage(SAMPLES[0].language)
+    setFilename('')
+    setForceFullAudit(false)
     setResult(null)
+    setReviewedSource('')
     setPrResult(null)
+    setCompletedNodes(new Set())
     setError(null)
     setPage('review')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const panel = (
+  const panelFor = (initialTab) => (
     <ReviewPanel
+      // Remount when the tab changes so the panel picks up its new initial tab
+      // rather than keeping the one it mounted with.
+      key={initialTab}
+      initialTab={initialTab}
       code={code}
       setCode={setCode}
       language={language}
@@ -128,6 +142,8 @@ export default function App() {
       tokenReady={tokenReady}
     />
   )
+
+  const panel = panelFor('paste')
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
@@ -189,14 +205,14 @@ export default function App() {
               tokenReady={tokenReady}
               blurb="Reading pull requests needs a GitHub token with repo scope. Add GITHUB_TOKEN to backend/.env and restart; the webhook additionally needs GITHUB_WEBHOOK_SECRET."
             >
-              {panel}
+              {panelFor('pr')}
               {prLoading && <Working label="Reading the PR, reviewing added lines…" />}
               {prResult && !prLoading && <PRResult data={prResult} />}
               {!prResult && !prLoading && (
                 <EmptyCard
                   icon={Icon.pr}
-                  title="No pull request analyzed"
-                  text="Paste a github.com PR link above. Only added lines are reviewed — flagging untouched code is noise the author cannot act on in this PR."
+                  title="Paste a PR link above to review it"
+                  text="Only the lines a PR adds are reviewed — flagging untouched code is noise the author cannot act on. This page posts nothing; it returns the comment the webhook bot would post, for preview. Try: https://github.com/Nitishjha7/code-guardian/pull/1"
                 />
               )}
             </TokenGatedPage>
