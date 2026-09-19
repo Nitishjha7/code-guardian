@@ -180,7 +180,8 @@ backend/app/mcp_clients/        GitHub client (PyGithub)
 backend/app/memory/             Episodic, semantic, long-term - SQLite-backed
 backend/tests/                  161 tests for the LLM-free seams
 backend/evals/                  40 labelled cases: 20 dev + 20 held-out
-Dockerfile · render.yaml        Single-service deploy image + Render blueprint
+Dockerfile                      Single-service deploy image - what Cloud Run builds
+render.yaml                     Render blueprint - still valid, not what runs today
 .github/workflows/ci.yml        Tests, frontend build, and a deploy-image smoke test
 frontend/src/                   React dashboard
 docs/                           9 docs — start with PROJECT_WALKTHROUGH.md

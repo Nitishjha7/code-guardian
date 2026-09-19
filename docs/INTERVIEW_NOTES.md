@@ -110,6 +110,9 @@ But the real question is: **why is "just prompt an LLM to review it" not enough?
 Honest answer: **a working system that would need work before production.**
 
 What is real:
+- **It is deployed and reachable** — https://code-guardian-906520260355.asia-south1.run.app
+  on Cloud Run, auto-deployed from `main`. A review on the live URL returned 5
+  findings at risk 50/high for $0.0025
 - The Docker stack runs; both entry points (UI and webhook) verified live
 - 161 unit tests, no API key required
 - Routing recall is **measured** on a held-out set, not assumed
@@ -123,9 +126,9 @@ What is not:
 - A single review still holds no state of its own between requests — the
   memory above spans across reviews, but nothing about one review's
   intermediate graph state survives past that request
-- On the free Render deploy, the memory sqlite file has no persistent disk
-  to live on, so it resets every deploy — fine locally via Docker's named
-  volume, an honest gap on the free tier
+- On Cloud Run the memory sqlite file sits on an ephemeral filesystem, so it
+  resets whenever the service scales to zero — fine locally via Docker's
+  named volume, an honest gap in the deployed build
 - Eval numbers are from `gpt-oss-20b`, not the default 120b
 
 Saying this distinction out loud lands well. Claiming "production-ready" and then
@@ -270,9 +273,9 @@ second review's finding carrying real precedent from the first. Two things
 still worth naming: it infers "dismissed" from *the patch generator not
 changing the code*, not from an explicit human rejection — there is no UI
 action today that records "a developer looked at this and said no," only
-"nothing followed." And on the free Render deploy the memory file has no
-persistent disk to live on, so it resets on every deploy — true locally via
-Docker's named volume, not true where it is actually hosted.
+"nothing followed." And on Cloud Run the memory file sits on an ephemeral
+filesystem, so it resets whenever the service scales to zero — durable locally
+via Docker's named volume, not durable where it is actually hosted.
 
 ### L6 — The PR bot has not run against a real repository
 
@@ -472,8 +475,8 @@ portfolio projects usually lack.
 1. **Performance routing is weak** — 50% dev, 43% held-out, and unbackstopped.
 2. **Bandit is Python-only**, so the multi-language claim is thin.
 3. **The PR bot is unverified against a real repository.**
-4. **Memory's "dismissed" is inferred, not explicit** — and on the free Render
-   deploy it has no persistent disk to survive a redeploy on.
+4. **Memory's "dismissed" is inferred, not explicit** — and on Cloud Run's
+   ephemeral filesystem it does not survive a scale-to-zero.
 5. **20 cases per set is small** — the interval around 100% is wide.
 6. **Eval numbers are from 20b**, not the default 120b.
 

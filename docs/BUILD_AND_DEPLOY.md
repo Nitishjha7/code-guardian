@@ -154,22 +154,55 @@ Details and caveats in the [README](../README.md).
 
 ## Deployment
 
-### What is left
+### Live
 
-The image is built and verified locally. These steps have to be done by hand:
+**https://code-guardian-906520260355.asia-south1.run.app**
 
-- [ ] Render → **New → Blueprint**, point it at this repo (it reads `render.yaml`)
-- [ ] Set `GROQ_API_KEY` in the dashboard
-- [ ] Open the URL and run the bundled CSS sample — it should route to **no auditor**
-- [ ] Update `GUARDIAN_CORS_ORIGINS` to the real service URL
-- [ ] Optional, for the PR bot: `GITHUB_TOKEN` + `GITHUB_WEBHOOK_SECRET`, then point a
-      repo webhook at `/webhook/github`
-- [ ] Put the live URL in the README
+Google Cloud Run, region `asia-south1` (Mumbai — ~10ms from India against ~150ms from
+the `europe-west1` default). Cloud Build watches `main` and redeploys on every push,
+so deployment is a `git push`, not a separate step.
+
+Verified on the live URL, not locally: a real review returned **5 findings** at risk
+**50/high** for **$0.0025**, and `/api/health` reports `groq_key_configured: true`
+with the fallback model configured.
+
+### Why Cloud Run over Render
+
+Render would fit *this* project — 73 MB resident against its 512 MB free cap, with
+room to spare. It does not fit the sibling Adaptive CRAG, which peaks at **698 MB**
+once the cross-encoder loads. Cloud Run lets memory be chosen per service (128 MiB to
+32 GiB), so all three portfolio projects live on one platform instead of being split
+across providers for no reason other than a memory ceiling.
+
+`render.yaml` is still in the repo and still correct — it is a working blueprint for
+anyone who wants to deploy this elsewhere. It is simply not what runs today.
+
+### The settings, and why each one
+
+| Setting | Value | Reason |
+|---|---|---|
+| Memory | 512 MiB | 73 MB measured peak — a wide margin, not a guess |
+| CPU | 1 | |
+| Concurrency | **10** | The Cloud Run default is 80. Eighty parallel LLM requests would OOM a 512 MiB container; the app's own `anyio.CapacityLimiter(4)` caps real parallelism far below that anyway |
+| Request timeout | 300s | A vulnerable-Python review takes ~11s, plus whatever Groq's throttling adds |
+| Min instances | **0** | Idle costs nothing. The console suggests raising it to 1 "to reduce cold starts" — that is a ~₹800–1,500/month line for a permanently warm container, and not worth it for a portfolio demo |
+| Max instances | 3 | Caps the bill if the public URL is hammered |
+| Container port | 8080 | Cloud Run injects `PORT=8080`; the Dockerfile's `CMD` reads `${PORT:-8000}`. They match — this does not need "fixing" to 8000 |
+
+`GROQ_API_KEY` is injected from **Secret Manager**, not stored as a plain environment
+variable. That binding needs an explicit IAM grant
+(`roles/secretmanager.secretAccessor` on the default compute service account); without
+it the revision fails to start with a permission error. The first two deploy attempts
+failed on exactly that.
+
+The container command and arguments are left **blank** on purpose. Filling them
+overrides the Dockerfile's `CMD`, which would silently drop `--log-config
+logging.json` and take the JSON access logs with it.
 
 ### One service, not two
 
 `Dockerfile` at the repo root builds the React app and hands the bundle to FastAPI,
-which serves it from the same origin as the API. `render.yaml` deploys exactly that.
+which serves it from the same origin as the API.
 
 This replaced an earlier split plan (backend on Render, frontend on Cloudflare Pages).
 A split needs CORS configured, a second deploy to keep in sync, and a second service to
@@ -180,26 +213,26 @@ already defaults to a relative `/api`, so no frontend code changed.
 The SPA keeps its page in the URL **hash**, so `StaticFiles(html=True)` is all the
 fallback needed — there is no path-based route for the server to 404 on.
 
-**Measured before choosing the free plan:** 73 MB resident after a real review, image
-334 MB, against Render free's 512 MB limit. Worth stating because the sibling
-Adaptive CRAG project had to leave Render for exactly this reason — it peaks at 698 MB
-once the cross-encoder loads. Code Guardian has no embedding model and no reranker, so
-it fits with room to spare.
+### Two things the deployed service does not do
 
-A review is still one graph invocation holding no state of its own between requests,
-and the PR bot writes its results back to GitHub rather than to a store of its own —
-that part of the original claim still holds. What changed since it was written:
-`app/memory/` now persists episodic/semantic/long-term facts *across* reviews, as a
-SQLite file at `MEMORY_DB_PATH` (default `/data/memory.db`). Locally, docker-compose.yml
-mounts a named volume there so it survives a rebuild. **On this free Render blueprint
-it will not** — Render's free web-service plan has no persistent disk (that needs a
-paid plan), so `/data` lives on the container's ephemeral filesystem and memory resets
-on every deploy and every free-tier spin-down. That is `app/memory/`'s fail-open design
-working as intended, not a bug: the service starts fine, memory is just cold again. A
-paid Render disk, or moving `MEMORY_DB_PATH` to a small managed volume elsewhere, is
-what closing this gap would take.
+**The PR bot is inactive.** `GITHUB_TOKEN` and `GITHUB_WEBHOOK_SECRET` are not set on
+Cloud Run, so `/webhook/github` returns 503 and processes nothing. That is the
+intended fail-closed behaviour, not a bug — a public URL that runs LLM calls and
+writes comments is a denial-of-wallet vector. The review UI works fully. Adding the
+two secrets later activates it.
 
-### Alternatives
+**Cross-review memory resets on cold start.** A review is still one graph invocation
+holding no state of its own between requests, but `app/memory/` persists
+episodic/semantic/long-term facts *across* reviews in a SQLite file at
+`MEMORY_DB_PATH` (default `/data/memory.db`). Locally, docker-compose mounts a named
+volume there so it survives a rebuild. **Cloud Run's filesystem is ephemeral** — it is
+destroyed when the service scales to zero, so memory is cold again on the next
+request. Nothing crashes; that is `app/memory/`'s fail-open design working as
+intended. The practical effect is that memory demonstrates within a warm instance
+(two reviews back to back) and not across an idle gap. Closing it means moving the
+store to Cloud Storage or Postgres.
+
+### Alternatives considered
 
 **Cloudflare Workers will not work for the backend** — Python/FastAPI and a
 long-running webhook process do not fit that runtime.

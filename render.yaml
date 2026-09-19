@@ -1,5 +1,12 @@
 # Render Blueprint — https://render.com/docs/blueprint-spec
 #
+# NOT what runs today. The live deployment is Google Cloud Run:
+#   https://code-guardian-906520260355.asia-south1.run.app
+# This blueprint is kept because it is still correct and still works — Cloud Run
+# was chosen over Render so that all three portfolio projects could share one
+# platform (the sibling Adaptive CRAG peaks at 698 MB, over Render free's 512 MB
+# cap). See docs/BUILD_AND_DEPLOY.md.
+#
 # Deploys the single-service image (FastAPI serving both the API and the built
 # React app), so the whole demo lives on one URL with no CORS to configure and
 # only one service to keep awake.

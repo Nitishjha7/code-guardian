@@ -18,6 +18,7 @@ summarises it; [TECHNICAL_SPEC §7](TECHNICAL_SPEC.md) details the deferred item
 | 2e | GitHub Check Run status (gates merges on the risk score) | ✅ done |
 | 2f | Streaming (`/api/review/stream`), model gateway fallback, token/cost tracking, JSON logging | ✅ done |
 | 2g | Cross-review memory — episodic, semantic, long-term (`app/memory/`) | ✅ done |
+| 2h | **Deployed** — Cloud Run, `asia-south1`, auto-deploy on push to `main` | ✅ [live](https://code-guardian-906520260355.asia-south1.run.app) |
 | 3, 5 | Advanced Intelligence Layer, full CI/CD | ⬜ deliberately deferred |
 
 **Built although it was not in the plan:** a routing eval with a **held-out set**
@@ -32,6 +33,7 @@ Everything here was actually run, not claimed.
 | Check | Result |
 |---|---|
 | Unit tests | **161 pass**, no API key needed |
+| **Deployed service, live** | A real review against the Cloud Run URL: **5 findings** (SQL injection, repeated DB connection, unclosed connection, missing index, `SELECT *`), risk **50/high**, **$0.0025** for the request. `/api/health` reports `groq_key_configured: true` and the fallback model configured — the Secret Manager binding and the gateway both work in production, not just locally |
 | Episodic memory, live | The same SQL-injection snippet reviewed twice against live Groq: `memory_note` empty on the first pass, `"seen 1 time(s) before (1 fixed)"` on the second — persisted across a full container rebuild via the named Docker volume. |
 | Routing eval, **held-out** (20 cases, never tuned against) | as-shipped security recall **100%**, 0 false negatives; router-only 89%; performance 43% |
 | Routing eval, dev (20 cases, tuned against) | as-shipped 100%; router-only 90%; performance 50% |
@@ -165,18 +167,31 @@ left. 2 closes the last caveat on the headline number.
 
 ---
 
-## Deployment
+## Deployment ✅
 
-Details in [BUILD_AND_DEPLOY.md](BUILD_AND_DEPLOY.md). Short version:
+**Live:** https://code-guardian-906520260355.asia-south1.run.app
 
-| Part | Platform |
-|---|---|
-| Backend (FastAPI + Docker) | Render / Railway |
-| Frontend (React) | Cloudflare Pages / Vercel |
+Google Cloud Run, `asia-south1`, built from the root `Dockerfile` by Cloud Build on
+every push to `main`. One service serves both the API and the SPA, so there is no
+second thing to deploy and no CORS to configure.
 
-**Cloudflare Workers will not work for the backend** — Python/FastAPI and a
-long-running webhook process do not fit that runtime.
+| Setting | Value | Reason |
+|---|---|---|
+| Memory | 512 MiB | measured peak is 73 MB |
+| CPU | 1 | |
+| Concurrency | 10 | the default 80 would OOM an LLM service |
+| Timeout | 300s | a vulnerable-Python review takes ~11s plus Groq throttling |
+| Min instances | 0 | idle costs nothing; the trade is a cold start |
+| Max instances | 3 | caps the blast radius if the URL gets hammered |
 
-Before deploying: verify `GUARDIAN_MODEL` (Groq retires ids), set
-`GITHUB_WEBHOOK_SECRET` (or the webhook fails closed with 503), and add the
-deployed frontend URL to `GUARDIAN_CORS_ORIGINS`.
+`GROQ_API_KEY` is injected from Secret Manager, not set as a plain environment
+variable. Details and the full click-path are in `../../DEPLOYMENT.md`.
+
+**Cloudflare Workers were ruled out** — Python/FastAPI and a long-running webhook
+process do not fit that runtime. Render would fit this project (73 MB against its
+512 MB cap) but not the sibling adaptive-crag (698 MB), so Cloud Run was chosen to
+keep all three on one platform.
+
+Still worth doing: `GITHUB_TOKEN` and `GITHUB_WEBHOOK_SECRET` are not set on the
+deployed service, so the PR bot is inactive there. The review UI works fully; the
+webhook fails closed with a 503, which is the intended behaviour rather than a bug.

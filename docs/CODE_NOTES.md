@@ -680,7 +680,7 @@ because private windows and blocked storage both throw.
 
 ## Docker
 
-- `backend/Dockerfile` — non-root user, respects `$PORT` (Render/Railway)
+- `backend/Dockerfile` — non-root user, respects `$PORT` (Cloud Run injects 8080)
 - `backend/Dockerfile.test` — tests, no key required
 - `backend/Dockerfile.eval` — routing eval, key required
 - `frontend/Dockerfile` — build + nginx
