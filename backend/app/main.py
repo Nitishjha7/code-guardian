@@ -503,6 +503,28 @@ def metrics() -> Response:
 #
 # The SPA routes on the URL hash, so `html=True` is all the fallback needed.
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+
+
+class _CachingStatics(StaticFiles):
+    """StaticFiles, but with cache headers Vite's output actually needs.
+
+    Everything under /assets/ carries a content hash in its filename, so it can
+    be cached indefinitely. index.html cannot: its URL is the same on every
+    deploy, and a cached copy keeps referencing the previous build's hashed
+    bundles, so the browser loads the old UI and no amount of redeploying fixes
+    it. StaticFiles sends neither header by default.
+    """
+
+    def file_response(self, full_path, stat_result, scope, status_code=200):
+        response = super().file_response(full_path, stat_result, scope, status_code)
+        path = str(full_path).replace("\\", "/")
+        if "/assets/" in path:
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
+
+
 if STATIC_DIR.is_dir():
-    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+    app.mount("/", _CachingStatics(directory=STATIC_DIR, html=True), name="static")
     logger.info("Serving the built frontend from %s", STATIC_DIR)

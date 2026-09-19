@@ -14,4 +14,12 @@ export default defineConfig({
       },
     },
   },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './src/test/setup.jsx',
+    // Monaco pulls in web workers and a DOM API jsdom does not implement, so
+    // the editor is stubbed in setup.js rather than loaded for every test.
+    css: false,
+  },
 })

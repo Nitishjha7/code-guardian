@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import Editor from '@monaco-editor/react'
 
+import { Icon } from './Icons'
 import { SAMPLES } from '../samples'
 import { CARD, LANGUAGES } from '../lib/ui'
 
@@ -33,8 +34,7 @@ export default function ReviewPanel({
   prLoading,
   tokenReady,
   // Which tab to open on. The Pull Requests page passes "pr" so the panel lands
-  // on the PR input instead of the code editor — opening that page on a code
-  // editor made it look like the wrong page had loaded.
+  // on the PR input instead of the code editor.
   initialTab = 'paste',
 }) {
   const [tab, setTab] = useState(initialTab)
@@ -63,13 +63,13 @@ export default function ReviewPanel({
   }
 
   return (
-    <section className={CARD}>
-      <div className="flex flex-wrap items-center gap-1 border-b border-slate-800 px-2">
-        <Tab active={tab === 'paste'} onClick={() => setTab('paste')}>
+    <section className={`${CARD} overflow-hidden`}>
+      <div className="flex flex-wrap items-center gap-1 border-b border-ink-700 bg-ink-900/60 px-3">
+        <Tab active={tab === 'paste'} onClick={() => setTab('paste')} icon={Icon.code}>
           Code
         </Tab>
-        <Tab active={tab === 'pr'} onClick={() => setTab('pr')}>
-          Pull request
+        <Tab active={tab === 'pr'} onClick={() => setTab('pr')} icon={Icon.pr}>
+          Pull Request
         </Tab>
 
         <input
@@ -80,39 +80,40 @@ export default function ReviewPanel({
           className="hidden"
         />
 
-        {/* Not a tab — it fills the editor on the Code tab. Sat alongside the
-            tabs before, which made it read as a third view. */}
-        {tab === 'paste' && (
-          <button
-            onClick={() => fileInput.current?.click()}
-            title="Load a file into the editor"
-            className="ml-auto my-1 rounded border border-slate-800 bg-slate-900 px-2 py-1 text-xs text-slate-400 transition hover:border-slate-700 hover:text-slate-200"
-          >
-            Open file…
-          </button>
-        )}
+        <div className="ml-auto flex items-center gap-2 py-2">
+          {tab === 'paste' && (
+            <button
+              onClick={() => fileInput.current?.click()}
+              title="Load a file into the editor"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-800 px-2.5 py-1.5 text-xs text-slate-400 transition hover:border-ink-600 hover:text-slate-200"
+            >
+              <Icon.upload width={13} height={13} />
+              Open file…
+            </button>
+          )}
 
-        <select
-          onChange={(e) => loadSample(e.target.value)}
-          value=""
-          className={`${tab === 'paste' ? '' : 'ml-auto'} my-1 rounded border border-slate-800 bg-slate-900 px-2 py-1 text-xs text-slate-400 outline-none`}
-        >
-          <option value="" disabled>
-            sample…
-          </option>
-          {SAMPLES.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
+          <select
+            onChange={(e) => loadSample(e.target.value)}
+            value=""
+            className="rounded-lg border border-ink-700 bg-ink-800 px-2.5 py-1.5 text-xs text-slate-400 outline-none transition hover:border-ink-600 focus:border-brand-600"
+          >
+            <option value="" disabled>
+              sample…
             </option>
-          ))}
-        </select>
+            {SAMPLES.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {tab === 'paste' ? (
         <>
-          <div className="overflow-hidden border-b border-slate-800 bg-[#0d1117]">
+          <div className="overflow-hidden border-b border-ink-700 bg-[#0a0e1a]">
             <Editor
-              height="260px"
+              height="320px"
               theme="vs-dark"
               language={language}
               value={code}
@@ -120,25 +121,27 @@ export default function ReviewPanel({
               options={{
                 minimap: { enabled: false },
                 fontSize: 13,
+                fontFamily: 'JetBrains Mono, ui-monospace, monospace',
                 scrollBeyondLastLine: false,
                 automaticLayout: true,
-                padding: { top: 10, bottom: 10 },
+                padding: { top: 14, bottom: 14 },
                 renderLineHighlight: 'none',
                 overviewRulerLanes: 0,
               }}
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 px-3 py-2.5">
+          <div className="flex flex-wrap items-center gap-3 bg-ink-900/40 px-4 py-3">
             <input
               value={filename}
               onChange={(e) => setFilename(e.target.value)}
-              className="w-32 bg-transparent font-mono text-xs text-slate-400 outline-none focus:text-slate-200"
+              placeholder="filename"
+              className="w-36 rounded-lg border border-transparent bg-transparent px-2 py-1 font-mono text-xs text-slate-400 outline-none transition placeholder:text-slate-600 hover:border-ink-700 focus:border-brand-600 focus:text-slate-200"
             />
             <select
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
-              className="rounded border border-slate-800 bg-slate-900 px-2 py-1 font-mono text-xs text-slate-400 outline-none"
+              className="rounded-lg border border-ink-700 bg-ink-800 px-2.5 py-1.5 font-mono text-xs text-slate-400 outline-none focus:border-brand-600"
             >
               {LANGUAGES.map((l) => (
                 <option key={l} value={l}>
@@ -151,14 +154,14 @@ export default function ReviewPanel({
             </span>
 
             <label
-              className="flex items-center gap-1.5 text-xs text-slate-500"
+              className="flex cursor-pointer items-center gap-2 text-xs text-slate-500 transition hover:text-slate-300"
               title="Bypass routing and run every auditor. For paths where a false negative is unacceptable."
             >
               <input
                 type="checkbox"
                 checked={forceFullAudit}
                 onChange={(e) => setForceFullAudit(e.target.checked)}
-                className="accent-indigo-500"
+                className="h-3.5 w-3.5 accent-brand-500"
               />
               force full audit
             </label>
@@ -169,35 +172,52 @@ export default function ReviewPanel({
               // land it in the submission parameter.
               onClick={() => onRun()}
               disabled={loading || !code.trim()}
-              className="ml-auto rounded bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+              className="ml-auto inline-flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {loading ? 'Reviewing…' : 'Review'}
+              {loading ? (
+                <>
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  Reviewing…
+                </>
+              ) : (
+                <>
+                  <Icon.sparkle width={15} height={15} />
+                  Run review
+                </>
+              )}
             </button>
           </div>
         </>
       ) : (
-        <div className="space-y-2.5 p-3">
+        <div className="space-y-3 p-4">
           <div className="flex gap-2">
-            <input
-              value={prUrl}
-              onChange={(e) => setPrUrl(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && prUrl.trim() && onRunPR(prUrl)}
-              placeholder="https://github.com/owner/repo/pull/42"
-              className="min-w-0 flex-1 rounded border border-slate-800 bg-slate-950 px-3 py-2 font-mono text-sm text-slate-200 outline-none placeholder:text-slate-700 focus:border-indigo-600"
-            />
+            <div className="relative min-w-0 flex-1">
+              <Icon.github
+                width={15}
+                height={15}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-600"
+              />
+              <input
+                value={prUrl}
+                onChange={(e) => setPrUrl(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && prUrl.trim() && onRunPR(prUrl)}
+                placeholder="https://github.com/owner/repo/pull/42"
+                className="w-full rounded-lg border border-ink-700 bg-ink-900 py-2.5 pl-9 pr-3 font-mono text-sm text-slate-200 outline-none transition placeholder:text-slate-600 focus:border-brand-600"
+              />
+            </div>
             <button
               onClick={() => onRunPR(prUrl)}
               disabled={prLoading || !prUrl.trim() || !tokenReady}
-              className="shrink-0 rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+              className="shrink-0 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {prLoading ? 'Reading…' : 'Analyze'}
             </button>
           </div>
-          <p className="text-xs text-slate-600">
+          <p className="text-xs leading-relaxed text-slate-500">
             {tokenReady
               ? 'Any public GitHub PR. Reviews only the lines it adds, and posts nothing — the comment is returned here for preview.'
               : 'Needs GITHUB_TOKEN in backend/.env.'}{' '}
-            Accepts <code className="text-slate-500">owner/repo#42</code> too.
+            Accepts <code className="text-slate-400">owner/repo#42</code> too.
           </p>
         </div>
       )}
@@ -205,16 +225,17 @@ export default function ReviewPanel({
   )
 }
 
-function Tab({ active, onClick, children }) {
+function Tab({ active, onClick, children, icon: Ico }) {
   return (
     <button
       onClick={onClick}
-      className={`px-3 py-2 text-sm transition ${
+      className={`flex items-center gap-2 border-b-2 px-3 py-3 text-sm transition ${
         active
-          ? 'border-b-2 border-indigo-500 text-slate-100'
-          : 'border-b-2 border-transparent text-slate-500 hover:text-slate-300'
+          ? 'border-brand-500 text-white'
+          : 'border-transparent text-slate-500 hover:text-slate-300'
       }`}
     >
+      {Ico && <Ico width={15} height={15} />}
       {children}
     </button>
   )

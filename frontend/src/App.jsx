@@ -12,7 +12,7 @@ import ReviewPanel from './components/ReviewPanel'
 import AgentFindings from './components/AgentFindings'
 import PatchView from './components/PatchView'
 import RunStrip from './components/RunStrip'
-import { LastReviewSummary, RecentActivity } from './components/Summary'
+import { FileAnalysis, RecentActivity, ReviewTimeline } from './components/Summary'
 import {
   AgentsPage,
   AnalyticsPage,
@@ -174,21 +174,27 @@ export default function App() {
   const panel = panelFor('paste')
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200">
-      <TopBar backend={backend} onNewReview={newReview} onNavigate={setPage} />
-      <MobileNav page={page} onNavigate={setPage} />
+    <div className="flex h-screen overflow-hidden bg-ink-950 text-slate-200">
+      <Sidebar page={page} onNavigate={setPage} backend={backend} />
 
-      <div className="flex">
-        <Sidebar page={page} onNavigate={setPage} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar
+          backend={backend}
+          onNewReview={newReview}
+          onNavigate={setPage}
+          filename={page === 'review' ? filename : ''}
+          language={page === 'review' ? language : ''}
+        />
+        <MobileNav page={page} onNavigate={setPage} />
 
-        <main className="min-w-0 flex-1 space-y-4 p-4">
+        <main className="min-w-0 flex-1 space-y-4 overflow-y-auto p-4 lg:p-5">
           {error && (
-            <div className="flex items-start gap-2.5 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3.5 py-2.5 text-sm text-rose-200">
+            <div className="flex items-start gap-2.5 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
               <Icon.alert className="mt-0.5 shrink-0" width={16} height={16} />
               <span className="flex-1">{error}</span>
               <button
                 onClick={() => setError(null)}
-                className="shrink-0 text-rose-400 hover:text-rose-200"
+                className="shrink-0 text-rose-400 transition hover:text-rose-200"
               >
                 ✕
               </button>
@@ -196,7 +202,10 @@ export default function App() {
           )}
 
           {page === 'review' && (
-            <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
+            // Three columns on a wide screen: editor, results, analysis. Below
+            // xl the analysis column drops under the other two rather than
+            // squeezing all three.
+            <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="min-w-0 space-y-4">
                 {panel}
 
@@ -212,11 +221,15 @@ export default function App() {
                 </div>
               </div>
 
-              <aside className="space-y-4">
-                <LastReviewSummary
+              {/* Sticky: the results below scroll past, but the score and the
+                  run's timeline are what a reader keeps referring back to. */}
+              <aside className="space-y-4 xl:sticky xl:top-0">
+                <FileAnalysis
                   result={result}
+                  filename={filename}
                   onViewAll={() => setPage('history')}
                 />
+                {result && !loading && <ReviewTimeline result={result} />}
                 <RecentActivity
                   entries={entries}
                   onSeeAll={() => setPage('history')}
@@ -285,7 +298,7 @@ export default function App() {
 function Working({ label = 'Routing the submission…' }) {
   return (
     <div className={`${CARD} flex items-center gap-3 px-4 py-5`}>
-      <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-700 border-t-indigo-400" />
+      <span className="h-4 w-4 animate-spin rounded-full border-2 border-ink-600 border-t-brand-400" />
       <p className="text-sm text-slate-400">{label}</p>
     </div>
   )
@@ -302,52 +315,76 @@ function FirstRunHint({ onTry }) {
     {
       id: 'vulnerable-python',
       label: 'Vulnerable Python',
+      lang: 'PY',
       expect: 'both auditors',
-      text: 'Findings marked ✓ were flagged by the LLM and by Bandit independently — agreement escalates severity.',
-      tone: 'text-rose-300',
+      text: 'SQL injection and an N+1 query. Findings marked ✓ were flagged by the LLM and by Bandit independently.',
+      icon: Icon.shield,
+      tint: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+      chip: 'bg-rose-500/10 text-rose-300 border-rose-500/30',
     },
     {
       id: 'plain-css',
       label: 'Plain CSS',
+      lang: 'CSS',
       expect: 'no auditor',
-      text: 'The router calls nothing at all and the run costs one LLM call instead of four. That decision is the project.',
-      tone: 'text-emerald-300',
+      text: 'The router calls nothing at all, so the run costs one LLM call instead of four.',
+      icon: Icon.check,
+      tint: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+      chip: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
     },
     {
       id: 'slow-js',
       label: 'Slow JavaScript',
+      lang: 'JS',
       expect: 'performance only',
       text: 'One auditor, not both — the router reads the submission rather than fanning out.',
-      tone: 'text-amber-300',
+      icon: Icon.gauge,
+      tint: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+      chip: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
     },
   ]
 
   return (
     <div className={`${CARD} overflow-hidden`}>
-      <div className="border-b border-slate-800 px-4 py-3">
-        <p className="text-sm font-medium text-slate-200">Run one to see the router decide</p>
-        <p className="mt-0.5 text-xs text-slate-500">
-          Three submissions, three different routing outcomes. Each loads and runs in one click.
-        </p>
+      <div className="flex items-center gap-2 border-b border-ink-700 px-4 py-3">
+        <Icon.sparkle width={15} height={15} className="text-brand-400" />
+        <div>
+          <p className="text-sm font-medium text-white">Try an example</p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Three submissions, three routing outcomes. Each loads and runs in one click.
+          </p>
+        </div>
       </div>
-      <div className="divide-y divide-slate-800">
+
+      <div className="grid gap-3 p-4 md:grid-cols-3">
         {rows.map((r) => (
           <button
             key={r.id}
             onClick={() => onTry(r.id)}
-            className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-slate-800/40"
+            className="group flex flex-col rounded-xl border border-ink-700 bg-ink-900/60 p-4 text-left transition hover:border-brand-500/50 hover:bg-ink-800"
           >
-            <span className="mt-0.5 shrink-0 text-slate-600">
-              <Icon.review width={14} height={14} />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="flex flex-wrap items-center gap-2">
-                <b className="text-sm text-slate-200">{r.label}</b>
-                <code className={`rounded bg-slate-800/80 px-1.5 py-0.5 text-[10px] ${r.tone}`}>
-                  expects: {r.expect}
-                </code>
+            <span className="flex items-center gap-2.5">
+              <span
+                className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg border ${r.tint}`}
+              >
+                <r.icon width={17} height={17} />
               </span>
-              <span className="mt-1 block text-xs leading-relaxed text-slate-500">{r.text}</span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium text-slate-100">
+                  {r.label}
+                </span>
+                <span className="font-mono text-[10px] text-slate-500">{r.lang}</span>
+              </span>
+            </span>
+
+            <span className="mt-3 block text-xs leading-relaxed text-slate-500">
+              {r.text}
+            </span>
+
+            <span
+              className={`mt-3 inline-flex w-fit items-center rounded-md border px-2 py-0.5 text-[10px] ${r.chip}`}
+            >
+              expects: {r.expect}
             </span>
           </button>
         ))}
@@ -362,14 +399,14 @@ function FindingDetail({ finding, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/85 p-4"
+      className="fixed inset-0 z-50 grid place-items-center bg-ink-950/85 p-4"
       onClick={onClose}
     >
       <div
-        className={`${CARD} max-h-[85vh] w-full max-w-2xl overflow-auto bg-slate-900`}
+        className={`${CARD} max-h-[85vh] w-full max-w-2xl overflow-auto bg-ink-850`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start gap-3 border-b border-slate-800 px-4 py-3">
+        <div className="flex items-start gap-3 border-b border-ink-700 px-4 py-3">
           <span
             className={`shrink-0 rounded border px-2 py-0.5 text-[11px] font-medium ${
               band(finding.severity?.toLowerCase()).chip
@@ -385,7 +422,7 @@ function FindingDetail({ finding, onClose }) {
 
         <div className="space-y-3.5 px-4 py-3.5 text-sm">
           {finding.line_hint && (
-            <pre className="overflow-x-auto rounded border border-slate-800 bg-[#0d1117] px-3 py-2 text-xs text-slate-300">
+            <pre className="overflow-x-auto rounded border border-ink-700 bg-[#0a0e1a] px-3 py-2 text-xs text-slate-300">
               {finding.line_hint}
             </pre>
           )}
@@ -399,7 +436,7 @@ function FindingDetail({ finding, onClose }) {
               <p className="text-xs font-medium text-slate-400">Complexity</p>
               <p className="mt-1 text-sm">
                 <code className="text-amber-300">{finding.complexity_before}</code>
-                <span className="mx-2 text-slate-600">→</span>
+                <span className="mx-2 text-slate-500">→</span>
                 <code className="text-emerald-300">{finding.complexity_after}</code>
               </p>
             </div>
@@ -409,7 +446,7 @@ function FindingDetail({ finding, onClose }) {
             <Block label="Recommended fix" text={finding.recommendation} />
           )}
 
-          <div className="border-t border-slate-800 pt-3 text-[11px] text-slate-500">
+          <div className="border-t border-ink-700 pt-3 text-[11px] text-slate-500">
             Found by{' '}
             <b className={confirmed ? 'text-emerald-300' : 'text-slate-400'}>
               {confirmed
@@ -465,7 +502,7 @@ function PRResult({ data }) {
         <div key={f.filename} className={`${CARD} px-4 py-3`}>
           <div className="flex flex-wrap items-center gap-2.5">
             <code className="text-sm text-slate-200">{f.filename}</code>
-            <span className="rounded border border-slate-800 bg-slate-900 px-1.5 py-0.5 font-mono text-[10px] text-slate-500">
+            <span className="rounded border border-ink-700 bg-ink-850 px-1.5 py-0.5 font-mono text-[10px] text-slate-500">
               {f.language}
             </span>
             <span className="font-mono text-[11px] text-emerald-500">+{f.additions}</span>
@@ -509,7 +546,7 @@ function PRResult({ data }) {
         <summary className="cursor-pointer text-sm text-slate-400">
           The comment the webhook would post
         </summary>
-        <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded border border-slate-800 bg-[#0d1117] p-3 text-xs text-slate-400">
+        <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded border border-ink-700 bg-[#0a0e1a] p-3 text-xs text-slate-400">
           {data.comment_markdown}
         </pre>
       </details>

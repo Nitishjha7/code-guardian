@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -8,5 +10,27 @@
 
 body {
   margin: 0;
-  background: #0b0f19;
+  background: #080b14;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Slim scrollbars; the default light ones cut through the dark panels. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #27314f transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #27314f;
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #3a456b;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
 }

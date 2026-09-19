@@ -55,7 +55,7 @@ export default function RunStrip({ result, loading, completedNodes }) {
   }
 
   return (
-    <section className={`${CARD} flex flex-wrap items-stretch divide-x divide-slate-800`}>
+    <section className={`${CARD} flex flex-wrap items-stretch divide-x divide-ink-700`}>
       <div className="flex min-w-[170px] items-center gap-3 px-4 py-3">
         <span
           className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg border text-base font-semibold tabular-nums ${style.chip}`}
@@ -72,7 +72,7 @@ export default function RunStrip({ result, loading, completedNodes }) {
 
       {STAGES.map(({ id, label }) => (
         <div key={id} className="flex min-w-[116px] flex-1 flex-col justify-center px-4 py-3">
-          <span className="text-[10px] uppercase tracking-wide text-slate-600">
+          <span className="text-[10px] uppercase tracking-wide text-slate-500">
             {label}
           </span>
           <span className={`mt-0.5 text-sm ${TONE[state[id].tone]}`}>
@@ -86,7 +86,7 @@ export default function RunStrip({ result, loading, completedNodes }) {
 
 const TONE = {
   ok: 'text-slate-200',
-  skip: 'text-slate-600',
+  skip: 'text-slate-500',
   warn: 'text-amber-300',
   fail: 'text-rose-300',
 }
@@ -112,14 +112,14 @@ function Skeleton({ completedNodes }) {
   )
 
   return (
-    <section className={`${CARD} flex flex-wrap items-stretch divide-x divide-slate-800`}>
+    <section className={`${CARD} flex flex-wrap items-stretch divide-x divide-ink-700`}>
       {['risk', ...STAGES.map((s) => s.id)].map((id) => (
         <div key={id} className="min-w-[116px] flex-1 space-y-2 px-4 py-3.5">
-          <div className="h-2 w-12 animate-pulse rounded bg-slate-800" />
+          <div className="h-2 w-12 animate-pulse rounded bg-ink-700" />
           {reached.has(id) ? (
             <div className="text-sm text-slate-400">done</div>
           ) : (
-            <div className="h-3 w-16 animate-pulse rounded bg-slate-800/70" />
+            <div className="h-3 w-16 animate-pulse rounded bg-ink-700/70" />
           )}
         </div>
       ))}

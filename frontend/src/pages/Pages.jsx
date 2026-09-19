@@ -77,10 +77,22 @@ export function AgentsPage() {
 
   return (
     <div className="space-y-5">
-      <PageHead
-        title="Agents"
-        subtitle="The six components of a review, and the compiled graph that runs them."
-      />
+      <div className={`${CARD} flex items-center gap-5 p-5`}>
+        <img
+          src="/icons/agent-robot.png"
+          alt=""
+          width={72}
+          height={72}
+          className="hidden shrink-0 sm:block"
+        />
+        <div>
+          <h1 className="text-xl font-semibold text-white">Agents</h1>
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-400">
+            Six components make up a review. The supervisor is the only one the
+            model itself steers — the rest run because an edge or a predicate says so.
+          </p>
+        </div>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {AGENTS.map((a) => (
@@ -93,14 +105,14 @@ export function AgentsPage() {
                 <h3 className="truncate text-sm font-medium text-slate-100">{a.name}</h3>
                 <code className="text-[10px] text-slate-500">{a.file}</code>
               </div>
-              <span className="ml-auto rounded-md border border-slate-700 bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">
+              <span className="ml-auto rounded-md border border-ink-600 bg-ink-700 px-2 py-0.5 text-[10px] text-slate-400">
                 {a.kind}
               </span>
             </div>
 
             <p className="mt-3 text-xs leading-relaxed text-slate-400">{a.what}</p>
 
-            <p className="mt-3 border-t border-slate-800 pt-3 text-[11px] leading-relaxed text-slate-500">
+            <p className="mt-3 border-t border-ink-700 pt-3 text-[11px] leading-relaxed text-slate-500">
               {a.note}
             </p>
           </div>
@@ -116,7 +128,7 @@ export function AgentsPage() {
         {error ? (
           <p className="mt-3 text-xs text-rose-300">{error}</p>
         ) : (
-          <pre className="mt-3 overflow-x-auto rounded-lg border border-slate-800 bg-[#0d1117] p-4 text-[11px] leading-relaxed text-slate-400">
+          <pre className="mt-3 overflow-x-auto rounded-lg border border-ink-700 bg-[#0a0e1a] p-4 text-[11px] leading-relaxed text-slate-400">
             {mermaid || 'Loading…'}
           </pre>
         )}
@@ -177,7 +189,7 @@ export function AnalyticsPage({ entries, onChanged, onGoToReview }) {
         action={
           <button
             onClick={() => onChanged(clear())}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-800"
+            className="flex items-center gap-1.5 rounded-lg border border-ink-600 px-3 py-1.5 text-xs text-slate-400 hover:bg-ink-700"
           >
             <Icon.trash width={13} height={13} />
             Clear history
@@ -207,7 +219,7 @@ export function AnalyticsPage({ entries, onChanged, onGoToReview }) {
                       <span className={style.text}>{style.label}</span>
                       <span className="tabular-nums text-slate-500">{count}</span>
                     </div>
-                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800">
+                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-ink-700">
                       <div
                         className="h-full rounded-full"
                         style={{ width: `${pct}%`, background: style.ring }}
@@ -241,7 +253,7 @@ export function AnalyticsPage({ entries, onChanged, onGoToReview }) {
               tone={incomplete ? 'text-rose-300' : 'text-slate-300'}
             />
           </div>
-          <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] leading-relaxed text-slate-500">
+          <p className="mt-4 border-t border-ink-700 pt-3 text-[11px] leading-relaxed text-slate-500">
             Cost per review is deliberately absent: it has not been measured, and this
             project does not display numbers it has not measured.
           </p>
@@ -252,7 +264,7 @@ export function AnalyticsPage({ entries, onChanged, onGoToReview }) {
         <h3 className="px-5 py-4 text-sm font-medium text-slate-100">All reviews</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="border-y border-slate-800 text-slate-500">
+            <thead className="border-y border-ink-700 text-slate-500">
               <tr>
                 <Th>When</Th>
                 <Th>Target</Th>
@@ -267,7 +279,7 @@ export function AnalyticsPage({ entries, onChanged, onGoToReview }) {
               {entries.map((e) => {
                 const style = band(e.band)
                 return (
-                  <tr key={e.id} className="border-b border-slate-800/60 hover:bg-slate-800/30">
+                  <tr key={e.id} className="border-b border-ink-700/60 hover:bg-ink-700/30">
                     <Td className="text-slate-500">{relativeTime(e.at)}</Td>
                     <Td className="max-w-[16rem] truncate text-slate-300">{e.label}</Td>
                     <Td className="text-slate-500">{e.language}</Td>
@@ -317,7 +329,7 @@ export function SettingsPage({ backend }) {
             />
             <Field label="Version" value={backend?.version || '—'} />
           </dl>
-          <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] leading-relaxed text-slate-500">
+          <p className="mt-4 border-t border-ink-700 pt-3 text-[11px] leading-relaxed text-slate-500">
             Groq retires model ids. If audits start failing, check which models your key
             can see before assuming the code broke.
           </p>
@@ -334,7 +346,7 @@ export function SettingsPage({ backend }) {
             <Field label="Secret patterns" value={g.secret_patterns ?? '—'} />
             <Field label="Tone patterns" value={g.tone_patterns ?? '—'} />
           </dl>
-          <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] leading-relaxed text-slate-500">
+          <p className="mt-4 border-t border-ink-700 pt-3 text-[11px] leading-relaxed text-slate-500">
             The local scanner is the default because some Guardrails AI validators pull a
             full torch install. The report always names which engine ran.
           </p>
@@ -354,7 +366,7 @@ export function SettingsPage({ backend }) {
               ok={bot.webhook_secret_configured}
             />
           </dl>
-          <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] leading-relaxed text-slate-500">
+          <p className="mt-4 border-t border-ink-700 pt-3 text-[11px] leading-relaxed text-slate-500">
             Injected from Google Secret Manager on the deployed service, and from{' '}
             <code className="text-slate-400">backend/.env</code> locally — never as a
             plain environment variable in either case. The webhook{' '}
@@ -363,7 +375,7 @@ export function SettingsPage({ backend }) {
             writes comments is a denial-of-wallet vector.
           </p>
           {bot.github_token_configured && bot.webhook_secret_configured && (
-            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-800 pt-4">
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-ink-700 pt-4">
               <span className="text-[11px] text-slate-500">
                 Verified end to end on a real pull request:
               </span>
@@ -419,8 +431,8 @@ export function PageHead({ title, subtitle, action }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
       <div>
-        <h1 className="text-xl font-semibold text-slate-50">{title}</h1>
-        {subtitle && <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p>}
+        <h1 className="text-xl font-semibold text-white">{title}</h1>
+        {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
       </div>
       {action && <div className="ml-auto">{action}</div>}
     </div>
@@ -430,19 +442,23 @@ export function PageHead({ title, subtitle, action }) {
 export function EmptyCard({ icon: Ico, title, text, code, actions, note }) {
   return (
     <div className={`${CARD} px-6 py-12 text-center`}>
-      <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl border border-slate-800 bg-slate-900 text-slate-600">
-        <Ico width={22} height={22} />
+      <span className="relative mx-auto grid h-16 w-16 place-items-center">
+        <span className="absolute inset-0 rounded-full bg-brand-500/10" />
+        <span className="absolute inset-2 rounded-full bg-brand-500/10" />
+        <span className="relative grid h-11 w-11 place-items-center rounded-full border border-brand-500/30 bg-ink-850 text-brand-400">
+          <Ico width={21} height={21} />
+        </span>
       </span>
-      <h3 className="mt-4 text-sm font-medium text-slate-200">{title}</h3>
+      <h3 className="mt-4 text-base font-semibold text-white">{title}</h3>
       <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-slate-500">{text}</p>
       {code && (
-        <pre className="mx-auto mt-4 w-fit rounded-lg border border-slate-800 bg-[#0d1117] px-4 py-3 text-left text-[11px] text-slate-400">
+        <pre className="mx-auto mt-4 w-fit rounded-lg border border-ink-700 bg-[#0a0e1a] px-4 py-3 text-left text-[11px] text-slate-400">
           {code}
         </pre>
       )}
       {actions && <div className="mt-5 flex flex-wrap justify-center gap-2">{actions}</div>}
       {note && (
-        <p className="mx-auto mt-5 max-w-md border-t border-slate-800 pt-4 text-[11px] leading-relaxed text-slate-600">
+        <p className="mx-auto mt-5 max-w-md border-t border-ink-700 pt-4 text-[11px] leading-relaxed text-slate-600">
           {note}
         </p>
       )}
@@ -455,7 +471,7 @@ export function EmptyAction({ onClick, children }) {
   return (
     <button
       onClick={onClick}
-      className="rounded-lg border border-sky-500/40 bg-sky-500/10 px-3.5 py-2 text-xs font-medium text-sky-300 transition hover:bg-sky-500/20"
+      className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-500"
     >
       {children}
     </button>
@@ -472,7 +488,7 @@ export function ExtLink({ href, children, className = '' }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className={`inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3.5 py-2 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:bg-slate-800 hover:text-slate-100 ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-lg border border-ink-600 bg-ink-700/60 px-3.5 py-2 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:bg-ink-700 hover:text-slate-100 ${className}`}
     >
       {children}
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-60">
@@ -485,13 +501,13 @@ export function ExtLink({ href, children, className = '' }) {
 function Tile({ label, value, suffix }) {
   return (
     <div className={`${CARD} p-5`}>
-      <div className="text-2xl font-semibold tabular-nums text-slate-50">
+      <div className="text-[26px] font-semibold leading-none tabular-nums text-white">
         {value}
         {suffix && value !== '—' && (
-          <span className="text-sm text-slate-500">{suffix}</span>
+          <span className="text-sm font-normal text-slate-500">{suffix}</span>
         )}
       </div>
-      <div className="mt-1 text-xs text-slate-500">{label}</div>
+      <div className="mt-2 text-xs text-slate-500">{label}</div>
     </div>
   )
 }

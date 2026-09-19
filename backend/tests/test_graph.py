@@ -306,3 +306,49 @@ def test_stream_unknown_node_falls_back_to_its_own_name(monkeypatch):
 
     kind, payload = next(graph_module.run_review_stream("x", "python"))
     assert payload["label"] == "some_new_node"
+
+
+def test_stream_accumulates_logs_across_nodes(monkeypatch):
+    """Streamed state must honour the ``operator.add`` reducers in state.py.
+
+    ``run_review_stream`` merges each node's partial into a running dict by
+    hand. A plain ``dict.update`` replaces ``logs`` with the latest node's
+    slice, so the finished review reported only the last node's lines - the
+    non-streaming path was unaffected, which is why the response-shape tests
+    stayed green.
+    """
+    import app.graph as graph_module
+
+    fake = _FakeCompiledGraph([
+        {"supervisor": {"logs": ["Supervisor: routed."]}},
+        {"collect": {"logs": ["Collector: 1 finding."], "routed_to": ["security_audit"]}},
+        {"patch": {"logs": ["Patch generator: produced a patch."]}},
+    ])
+    monkeypatch.setattr(graph_module, "get_graph", lambda: fake)
+
+    events = list(graph_module.run_review_stream("x = 1", "python"))
+    final = events[-1][1]
+
+    assert [l for l in final["logs"] if l.startswith("Supervisor")]
+    assert [l for l in final["logs"] if l.startswith("Collector")]
+    assert [l for l in final["logs"] if l.startswith("Patch generator")]
+    # started + three nodes + finished
+    assert len(final["logs"]) == 5
+    # Non-accumulated keys still take the latest value.
+    assert final["routed_to"] == ["security_audit"]
+
+
+def test_stream_accumulates_audit_errors_too(monkeypatch):
+    import app.graph as graph_module
+
+    fake = _FakeCompiledGraph([
+        {"collect": {"audit_errors": ["security_audit: boom"]}},
+        {"patch": {"audit_errors": ["performance_audit: bang"]}},
+    ])
+    monkeypatch.setattr(graph_module, "get_graph", lambda: fake)
+
+    final = list(graph_module.run_review_stream("x = 1", "python"))[-1][1]
+    assert final["audit_errors"] == [
+        "security_audit: boom",
+        "performance_audit: bang",
+    ]

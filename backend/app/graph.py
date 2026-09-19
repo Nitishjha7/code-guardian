@@ -461,6 +461,21 @@ def run_review(
     return result
 
 
+# The state keys the graph accumulates with ``operator.add`` (see app/state.py).
+# ``dict.update`` would replace each of these with the latest node's slice, so a
+# streamed review ended up reporting only the last node's log lines.
+_ACCUMULATED = ("logs", "audit_errors")
+
+
+def _merge_partial(state: ReviewerState, partial: dict) -> None:
+    """Fold one node's output into the running state, honouring the reducers."""
+    for key, value in partial.items():
+        if key in _ACCUMULATED and isinstance(value, list):
+            state[key] = list(state.get(key) or []) + value
+        else:
+            state[key] = value
+
+
 # --------------------------------------------------------------------------- #
 # Streaming
 # --------------------------------------------------------------------------- #
@@ -517,7 +532,7 @@ def run_review_stream(
         # ``{node_name: partial_state}``. A node can appear more than once (the
         # tools loop), so merge rather than replace.
         for node_name, partial in update.items():
-            state.update(partial)
+            _merge_partial(state, partial)
             yield "progress", {
                 "node": node_name,
                 "label": _NODE_LABELS.get(node_name, node_name),

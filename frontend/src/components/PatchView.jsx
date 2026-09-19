@@ -43,17 +43,17 @@ export default function PatchView({ result, original }) {
 
   return (
     <section className={CARD}>
-      <div className="flex flex-wrap items-center gap-3 border-b border-slate-800 px-5 py-4">
+      <div className="flex flex-wrap items-center gap-3 border-b border-ink-700 px-5 py-4">
         <h2 className="text-base font-semibold text-slate-100">Generated Patch</h2>
 
-        <div className="flex gap-1 rounded-lg border border-slate-800 bg-slate-950/60 p-1">
+        <div className="flex gap-1 rounded-lg border border-ink-700 bg-ink-900 p-1">
           {tabs.map(([id, label]) => (
             <button
               key={id}
               onClick={() => setTab(id)}
               className={`rounded-md px-3 py-1.5 text-xs transition ${
                 tab === id
-                  ? 'bg-slate-800 text-slate-100'
+                  ? 'bg-ink-700 text-slate-100'
                   : 'text-slate-500 hover:text-slate-300'
               }`}
             >
@@ -65,7 +65,7 @@ export default function PatchView({ result, original }) {
         <button
           onClick={() => copy(payload || '', tab)}
           disabled={!payload}
-          className="ml-auto rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-1.5 text-xs text-slate-300 transition hover:bg-slate-800 disabled:opacity-40"
+          className="ml-auto rounded-lg border border-ink-600 bg-ink-800 px-3 py-1.5 text-xs text-slate-300 transition hover:bg-ink-700 disabled:opacity-40"
         >
           {copied === tab ? 'Copied' : copied === 'blocked' ? 'Blocked' : 'Copy'}
         </button>
@@ -99,7 +99,7 @@ export default function PatchView({ result, original }) {
         {tab === 'report' && <Code text={result.summary_report} wrap />}
 
         {tab === 'log' && (
-          <ol className="space-y-1 rounded-lg border border-slate-800 bg-[#0d1117] p-4 font-mono text-xs">
+          <ol className="space-y-1 rounded-lg border border-ink-700 bg-[#0a0e1a] p-4 font-mono text-xs">
             {(result.logs || []).map((line, i) => (
               <li key={i} className="flex gap-3">
                 <span className="shrink-0 text-slate-600">
@@ -143,7 +143,7 @@ function SideBySide({ original, patched, diff }) {
         <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-300">
           Show unified diff
         </summary>
-        <pre className="mt-3 overflow-x-auto rounded-lg border border-slate-800 bg-[#0d1117] p-4 text-xs leading-relaxed">
+        <pre className="mt-3 overflow-x-auto rounded-lg border border-ink-700 bg-[#0a0e1a] p-4 text-xs leading-relaxed">
           {diff.split('\n').map((line, i) => (
             <div key={i} className={diffClass(line)}>
               {line || ' '}
@@ -179,7 +179,7 @@ function Pane({ title, tone, head, text, marker }) {
 function Code({ text, wrap }) {
   return (
     <pre
-      className={`max-h-[28rem] overflow-auto rounded-lg border border-slate-800 bg-[#0d1117] p-4 text-xs leading-relaxed text-slate-300 ${
+      className={`max-h-[28rem] overflow-auto rounded-lg border border-ink-700 bg-[#0a0e1a] p-4 text-xs leading-relaxed text-slate-300 ${
         wrap ? 'whitespace-pre-wrap' : ''
       }`}
     >
@@ -190,7 +190,7 @@ function Code({ text, wrap }) {
 
 function Empty({ text }) {
   return (
-    <p className="rounded-lg border border-dashed border-slate-800 px-4 py-10 text-center text-sm text-slate-500">
+    <p className="rounded-lg border border-dashed border-ink-700 px-4 py-10 text-center text-sm text-slate-500">
       <Icon.file className="mx-auto mb-2 text-slate-700" width={22} height={22} />
       {text}
     </p>

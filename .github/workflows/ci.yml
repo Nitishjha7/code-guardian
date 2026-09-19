@@ -35,7 +35,7 @@ jobs:
         run: pytest -q
 
   frontend:
-    name: frontend · production build
+    name: frontend · 7 tests + build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,6 +49,12 @@ jobs:
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
+
+      # Covers the seams that actually broke: the editor not clearing, a failed
+      # audit rendering as a pass, and the PR page opening on the wrong tab.
+      - name: Test
+        working-directory: frontend
+        run: npm test
 
       # The deploy image builds the same bundle, so a break caught here would
       # otherwise surface only at deploy time.
