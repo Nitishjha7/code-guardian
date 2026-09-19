@@ -306,9 +306,10 @@ differently on purpose. **Episodic** records every finding's outcome
 (fixed or dismissed) keyed by a normalized signature of the snippet plus the
 finding title, and a future review of the same shape gets that precedent
 folded into the finding as `memory_note` — before the model that reads it
-ever sees the file. **Semantic** looks across *many* episodes for a finding
-that keeps getting reported and never fixed, and writes that down as a fact —
-deliberately not automatic, triggered instead via
+ever sees the file. **Semantic** looks across *many* episodes for a finding that keeps recurring on
+the same code shape and writes that down as a fact — a recurring defect when it
+is repeatedly fixed, a likely false positive when it never is. Deliberately not
+automatic, triggered instead via
 `POST /api/memory/consolidate`, because it is a full-table aggregate, not a
 per-review cost. **Long-term** is explicit, per-repo review preferences
 (`PUT /api/preferences/{repo}`) — never inferred, the same rule
@@ -366,7 +367,7 @@ container's disposable writable layer.
 
 | Check | Result |
 |---|---|
-| Unit tests | **172 pass**, no API key needed |
+| Unit tests | **181 pass**, no API key needed |
 | Routing eval, **held-out** set (20 cases, never tuned) | **as-shipped security recall 100%** (0 false negatives); router-only 89%; performance 43% |
 | Routing eval, dev set (20 cases, tuned against) | as-shipped 100%; router-only 90%; performance 50% |
 | Static fusion, vulnerable Python | 8 raw findings → **5** after dedup; **3 confirmed by both engines**; Bandit added 2 SQLi sites the LLM missed |
@@ -425,7 +426,7 @@ See [ROADMAP](ROADMAP.md).
 ```bash
 docker compose up --build                    # UI :3000, API :8010
 
-cd backend && pytest -q                      # 172 tests, no key needed
+cd backend && pytest -q                      # 181 tests, no key needed
 cd backend && python -m evals.run_routing_eval   # needs a key, ~20 calls
 
 curl https://api.groq.com/openai/v1/models -H "Authorization: Bearer $GROQ_API_KEY"

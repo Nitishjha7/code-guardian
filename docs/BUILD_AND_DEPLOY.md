@@ -162,7 +162,7 @@ failed and malformed audits), every guardrail pattern, and the whole Phase 2
 surface: HMAC verification, event filtering, file selection, PR-link parsing and
 added-line extraction.
 
-**172 tests, no API key needed.** Not covered: the agent prompts themselves, and
+**181 tests, no API key needed.** Not covered: the agent prompts themselves, and
 the PyGithub calls (they need a token and a live PR).
 
 Routing quality is measured separately by `backend/evals/` — two sets of 20, one
@@ -265,7 +265,19 @@ form encoding breaks it), and request-based billing freezing the background revi
 task the instant the 202 returned. The last one is the interesting one — it fails
 *silently*, with the log ending at `Queued review` and no error after it.
 
-### Two things the deployed service does not do
+### Three things the deployed service does not do
+
+**`/api/review` is unauthenticated and unthrottled.** Anyone who has the URL can
+spend the project's Groq quota. This is deliberate for a portfolio demo - the point
+is that a reviewer can open the link and use it - but it is a denial-of-wallet
+surface, so the cost is bounded rather than ignored: each agent truncates its input
+at 24,000 characters (`app/agents/_common.py`), `anyio.CapacityLimiter(4)` caps
+concurrent reviews, and Cloud Run's max-instances setting caps the rest. The webhook
+path is the opposite: it fails closed without `GITHUB_WEBHOOK_SECRET` and verifies
+every delivery with `hmac.compare_digest`, because that path writes to repositories.
+Behind a real user base the review endpoint would need per-IP rate limiting and an
+API key; neither is present today.
+
 
 **The Check Run does not post.** Everything else on the webhook path works — see the
 PR bot section below — but `create_check_run` returns 403. GitHub's fine-grained

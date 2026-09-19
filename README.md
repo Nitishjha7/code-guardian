@@ -48,7 +48,7 @@ review incomplete.
 | **Streams its own progress** | `/api/review/stream` (SSE) yields a `progress` event as each graph node finishes — the routing decision, which auditor is running, when the patch generator starts — instead of one opaque wait. Built on `graph.stream(mode="updates")`, not a second traversal, so it cannot drift from what `/api/review` actually executes. |
 | **Falls over to a second model** | `get_llm()` returns a `with_fallbacks()` chain when `GUARDIAN_FALLBACK_MODELS` is set — a real answer to a real incident this project already had (Groq retired a model id mid-project with no warning). Same-provider only; see [config.py](backend/app/config.py) for why that distinction is stated rather than glossed over. |
 | **Prices its own routing decision** | Every review returns `token_usage` — calls, tokens and USD per model, from Groq's own `usage_metadata`, not an estimate. This is what turns "routing saves cost" from a claim into a number: real runs measured **1 call / $0.0003 on CSS** vs **4 calls / $0.0020 on vulnerable Python** — roughly 7×, for the same reason the latency gap exists. |
-| **Remembers past findings** | `app/memory/` — episodic (has this exact snippet-and-finding pair been seen before, and was it fixed or dismissed), semantic (a finding reported repeatedly and never fixed, distilled into a stated fact), long-term (explicit per-repo review preferences via `PUT /api/preferences/{repo}`). SQLite-backed, not pgvector — this project has no other database and Groq has no embeddings API, so the similarity that matters (an identical code shape) is answered by a normalized signature rather than a vector search. See [docs/CODE_NOTES.md](docs/CODE_NOTES.md). |
+| **Remembers past findings** | `app/memory/` — episodic (has this exact snippet-and-finding pair been seen before, and was it fixed or dismissed), semantic (a finding seen repeatedly on the same code shape, distilled into a stated fact — recurring defect if it keeps getting fixed, likely false positive if it never does), long-term (explicit per-repo review preferences via `PUT /api/preferences/{repo}`). SQLite-backed, not pgvector — this project has no other database and Groq has no embeddings API, so the similarity that matters (an identical code shape) is answered by a normalized signature rather than a vector search. See [docs/CODE_NOTES.md](docs/CODE_NOTES.md). |
 
 ---
 
@@ -115,7 +115,7 @@ Every row below was run, not claimed.
 
 | Check | Result |
 |---|---|
-| Backend unit tests | **172 passing**, no API key required |
+| Backend unit tests | **181 passing**, no API key required |
 | Vulnerable Python sample | 5 security + 2 performance findings; **3 confirmed by both engines**; Bandit caught 2 SQLi sites the LLM missed |
 | Risk score | vulnerable Python **100/100 critical** · slow JS **10/100 low** · CSS **0/100 none** |
 | Failed audit | band `unknown`, *"Audit failed — this code was not checked"*, never a clean pass |
@@ -183,7 +183,7 @@ backend/app/agents/static_analysis.py   Bandit fusion: scan, map, dedupe, merge
 backend/app/guardrails_config/  Secrets + tone validators
 backend/app/mcp_clients/        GitHub client (PyGithub)
 backend/app/memory/             Episodic, semantic, long-term - SQLite-backed
-backend/tests/                  172 tests for the LLM-free seams
+backend/tests/                  181 tests for the LLM-free seams
 backend/evals/                  40 labelled cases: 20 dev + 20 held-out
 Dockerfile                      Single-service deploy image - what Cloud Run builds
 render.yaml                     Render blueprint - still valid, not what runs today
