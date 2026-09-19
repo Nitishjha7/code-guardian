@@ -22,7 +22,7 @@ summarises it; [TECHNICAL_SPEC §7](TECHNICAL_SPEC.md) details the deferred item
 | 3, 5 | Advanced Intelligence Layer, full CI/CD | ⬜ deliberately deferred |
 
 **Built although it was not in the plan:** a routing eval with a **held-out set**
-(`backend/evals/`, 40 cases), 164 unit tests, and the full docs set.
+(`backend/evals/`, 40 cases), 172 unit tests, and the full docs set.
 
 ---
 
@@ -32,7 +32,7 @@ Everything here was actually run, not claimed.
 
 | Check | Result |
 |---|---|
-| Unit tests | **164 pass**, no API key needed |
+| Unit tests | **172 pass**, no API key needed |
 | **Deployed service, live** | A real review against the Cloud Run URL: **5 findings** (SQL injection, repeated DB connection, unclosed connection, missing index, `SELECT *`), risk **50/high**, **$0.0025** for the request. `/api/health` reports `groq_key_configured: true` and the fallback model configured — the Secret Manager binding and the gateway both work in production, not just locally |
 | **PR bot, on a real PR** | [PR #1](https://github.com/Nitishjha7/code-guardian/pull/1): **11 security / 5 performance** findings, risk **100/100 CRITICAL**, a full suggested patch, and the outbound guardrail redacting a hardcoded password out of the bot's own comment. Webhook HMAC verified end to end — valid signature **202**, tampered signature **401** |
 | Episodic memory, live | The same SQL-injection snippet reviewed twice against live Groq: `memory_note` empty on the first pass, `"seen 1 time(s) before (1 fixed)"` on the second — persisted across a full container rebuild via the named Docker volume. |

@@ -115,7 +115,7 @@ Every row below was run, not claimed.
 
 | Check | Result |
 |---|---|
-| Backend unit tests | **164 passing**, no API key required |
+| Backend unit tests | **172 passing**, no API key required |
 | Vulnerable Python sample | 5 security + 2 performance findings; **3 confirmed by both engines**; Bandit caught 2 SQLi sites the LLM missed |
 | Risk score | vulnerable Python **100/100 critical** · slow JS **10/100 low** · CSS **0/100 none** |
 | Failed audit | band `unknown`, *"Audit failed — this code was not checked"*, never a clean pass |
@@ -183,7 +183,7 @@ backend/app/agents/static_analysis.py   Bandit fusion: scan, map, dedupe, merge
 backend/app/guardrails_config/  Secrets + tone validators
 backend/app/mcp_clients/        GitHub client (PyGithub)
 backend/app/memory/             Episodic, semantic, long-term - SQLite-backed
-backend/tests/                  164 tests for the LLM-free seams
+backend/tests/                  172 tests for the LLM-free seams
 backend/evals/                  40 labelled cases: 20 dev + 20 held-out
 Dockerfile                      Single-service deploy image - what Cloud Run builds
 render.yaml                     Render blueprint - still valid, not what runs today

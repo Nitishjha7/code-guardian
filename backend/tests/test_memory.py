@@ -195,3 +195,123 @@ class TestLongTerm:
     def test_format_preferences_for_prompt_lists_each(self):
         text = long_term.format_preferences_for_prompt({"min_severity": "High"})
         assert "min_severity" in text and "High" in text
+
+    def test_prompt_block_refuses_to_let_a_preference_hide_a_real_finding(self):
+        """A preference is a triage threshold, not consent to hide a
+        vulnerability. Whatever the repo asked for, the block has to carry the
+        floor with it - otherwise "Critical only" reads to the model as
+        permission to drop an exploitable High."""
+        text = long_term.format_preferences_for_prompt({"min_severity": "Critical"})
+        assert "may not suppress" in text
+        assert "Critical or High" in text
+
+    def test_current_prompt_block_is_empty_until_preferences_are_installed(self):
+        """The ad-hoc /api/review path has no repo, so the auditors must run on
+        their base prompts rather than on some other repo's leftovers."""
+        long_term.set_current({})
+        assert long_term.current_prompt_block() == ""
+
+    def test_current_prompt_block_reflects_the_installed_preferences(self):
+        long_term.set_current({"house_style": "prefix every title with X-"})
+        try:
+            assert "prefix every title with X-" in long_term.current_prompt_block()
+        finally:
+            long_term.set_current({})
+
+
+class TestPreferencesReachTheAuditors:
+    """The wiring, not the storage.
+
+    Preferences shipped stored, readable over the API, and completely
+    disconnected: ``format_preferences_for_prompt`` existed but its only callers
+    were its own unit tests, no agent imported the memory package, and
+    ``/api/review`` had no ``repo_id`` field to scope them by. Every test above
+    passed throughout. These assert on the seam that was missing.
+    """
+
+    def _capture_system_prompt(self, monkeypatch, agent_module):
+        """Run the agent against a stub LLM and return the system prompt it sent."""
+        captured = {}
+
+        class _StubLLM:
+            def invoke(self, messages):
+                captured["system"] = messages[0].content
+
+                class _R:
+                    content = "[]"
+
+                return _R()
+
+        monkeypatch.setattr(agent_module, "get_llm", lambda **kw: _StubLLM())
+        return captured
+
+    def test_security_agent_sends_the_preferences(self, monkeypatch):
+        from app.agents import security_agent
+
+        captured = self._capture_system_prompt(monkeypatch, security_agent)
+        monkeypatch.setattr(
+            security_agent.static_analysis, "audit", lambda *a, **k: ([], "")
+        )
+        long_term.set_current({"house_style": "prefix titles with X-"})
+        try:
+            security_agent.audit("x = 1", "python")
+        finally:
+            long_term.set_current({})
+
+        assert "prefix titles with X-" in captured["system"]
+
+    def test_performance_agent_sends_the_preferences(self, monkeypatch):
+        from app.agents import performance_agent
+
+        captured = self._capture_system_prompt(monkeypatch, performance_agent)
+        long_term.set_current({"house_style": "prefix titles with X-"})
+        try:
+            performance_agent.audit("x = 1", "python")
+        finally:
+            long_term.set_current({})
+
+        assert "prefix titles with X-" in captured["system"]
+
+    def test_no_preferences_leaves_the_base_prompt_untouched(self, monkeypatch):
+        from app.agents import performance_agent
+
+        captured = self._capture_system_prompt(monkeypatch, performance_agent)
+        long_term.set_current({})
+        performance_agent.audit("x = 1", "python")
+
+        assert captured["system"] == performance_agent.SYSTEM_PROMPT
+
+    def test_run_review_installs_the_reviewed_repos_preferences(self, monkeypatch):
+        """The graph has to look the preferences up by repo_id. Passing repo_id
+        through to the episode writer but not to the auditors is exactly the
+        half-wiring that shipped."""
+        import app.graph as graph_module
+
+        long_term.set_preference("owner/repo", "house_style", "prefix titles with X-")
+        seen = {}
+
+        class _FakeGraph:
+            def invoke(self, state, config=None):
+                seen["block"] = long_term.current_prompt_block()
+                return dict(state)
+
+        monkeypatch.setattr(graph_module, "get_graph", lambda: _FakeGraph())
+        graph_module.run_review("x = 1", "python", repo_id="owner/repo")
+
+        assert "prefix titles with X-" in seen["block"]
+
+    def test_a_review_with_no_repo_gets_no_preferences(self, monkeypatch):
+        import app.graph as graph_module
+
+        long_term.set_preference("owner/repo", "house_style", "prefix titles with X-")
+        seen = {}
+
+        class _FakeGraph:
+            def invoke(self, state, config=None):
+                seen["block"] = long_term.current_prompt_block()
+                return dict(state)
+
+        monkeypatch.setattr(graph_module, "get_graph", lambda: _FakeGraph())
+        graph_module.run_review("x = 1", "python", repo_id="")
+
+        assert seen["block"] == ""
