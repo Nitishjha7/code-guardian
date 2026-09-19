@@ -473,17 +473,11 @@ def metrics() -> Response:
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-# Mounted last, and deliberately so: a mount at "/" swallows every path beneath
-# it, so every API route above has to be registered first or it becomes
-# unreachable.
+# Mounted last: a mount at "/" swallows every path beneath it, so the API routes
+# above must be registered first. Only the single-service deploy image has this
+# directory — under compose, nginx serves the frontend and this is a no-op.
 #
-# Only the single-service deploy image has this directory. Under docker-compose
-# nginx serves the frontend and this block is a no-op, which is why the check is
-# on the directory rather than on an env var — one fewer thing to set correctly.
-#
-# The SPA keeps its page in the URL *hash* (`lib/router.js`), so every route is
-# the same document and `html=True` is all the fallback this needs. A path-based
-# router would need a catch-all returning index.html.
+# The SPA routes on the URL hash, so `html=True` is all the fallback needed.
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 if STATIC_DIR.is_dir():
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

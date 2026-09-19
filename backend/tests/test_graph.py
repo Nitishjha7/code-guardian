@@ -215,13 +215,9 @@ def test_collect_node_records_both_auditors():
 # run_review_stream
 # --------------------------------------------------------------------------- #
 #
-# These test the generator's contract against a fake compiled graph, not the
-# real one - the real graph needs a live model and is exercised separately
-# (README "Verified" table, and by hand against /api/review/stream). What is
-# tested here is the seam that would break silently: does each node update
-# turn into exactly one progress event, does state accumulate the way
-# LangGraph's own merge does, and does the final event carry the complete
-# state - all independent of any LLM call.
+# Against a fake compiled graph: one progress event per node update, state
+# accumulating the way LangGraph merges it, and a final event carrying the whole
+# state. The real graph needs a live model and is checked separately.
 
 class _FakeCompiledGraph:
     """Stands in for ``get_graph()``. ``updates`` mirrors what

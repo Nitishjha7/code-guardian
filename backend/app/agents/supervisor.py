@@ -25,14 +25,12 @@ from langchain_core.tools import tool
 from ..config import get_llm
 from . import performance_agent, security_agent
 
-# Set by the graph before each run so the tools can see the code without the
-# supervisor having to echo an entire diff back through its own tool arguments
-# (which would cost the input tokens twice and risk the model truncating it).
+# Set by the graph before each run, so the tools read the submission instead of
+# the supervisor echoing a whole diff through its tool arguments — that would
+# bill the input tokens twice and risk truncation.
 #
-# A ContextVar rather than a plain module global: the API serves concurrent
-# requests, and a global dict would let two simultaneous reviews audit each
-# other's code. ContextVars are copied into the context LangGraph runs each node
-# in, so every review sees its own submission.
+# A ContextVar, not a module global: the API serves concurrent requests, and a
+# global would let two reviews audit each other's code.
 _CURRENT_INPUT: ContextVar[tuple[str, str]] = ContextVar(
     "code_guardian_current_input", default=("", "python")
 )

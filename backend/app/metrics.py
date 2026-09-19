@@ -97,12 +97,10 @@ def record_review(state: dict, primary_model: str | None = None) -> None:
         TOKENS_TOTAL.labels(model=model, direction="input").inc(stats.get("input_tokens", 0))
         TOKENS_TOTAL.labels(model=model, direction="output").inc(stats.get("output_tokens", 0))
 
-    # A fallback fired if more than one model answered during this review
-    # (primary failed partway through, fallback finished the rest), or if the
-    # only model that answered isn't the configured primary at all (primary
-    # failed on every single call). The second case is why this needs
-    # ``primary_model`` passed in rather than guessing from the usage dict
-    # alone - one model answering is not, by itself, evidence of anything.
+    # A fallback fired if more than one model answered, or if the only model
+    # that answered was not the configured primary. The second case is why
+    # ``primary_model`` is passed in — one model answering proves nothing on
+    # its own.
     fell_back = len(models_that_answered) > 1 or (
         primary_model is not None
         and len(models_that_answered) == 1
