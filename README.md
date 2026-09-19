@@ -4,11 +4,15 @@
 
 **Multi-agent code reviewer where an LLM decides which specialists a diff actually needs.**
 
+[![live demo](https://img.shields.io/badge/live%20demo-Cloud%20Run-4285f4)](https://code-guardian-906520260355.asia-south1.run.app)
 [![tests](https://github.com/Nitishjha7/code-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/Nitishjha7/code-guardian/actions/workflows/ci.yml)
 [![security recall](https://img.shields.io/badge/security%20recall-100%25%20held--out-3fb950)](#does-the-router-actually-work)
 [![LangGraph](https://img.shields.io/badge/LangGraph-StateGraph-4f46e5)](backend/app/graph.py)
 [![Groq](https://img.shields.io/badge/Groq-gpt--oss--120b-f97316)](backend/app/config.py)
 [![license](https://img.shields.io/badge/license-MIT-64748b)](#license)
+
+**[▶ Try it live](https://code-guardian-906520260355.asia-south1.run.app)** — first
+request takes a few seconds (Cloud Run cold start)
 
 </div>
 
@@ -234,14 +238,28 @@ runs and tests found.
 Phases 1 and 2 are implemented, along with static-analysis fusion, risk scoring, test
 generation, the Check Run gate, and a held-out routing eval.
 
-**Deploy-ready, not deployed.** `Dockerfile` and `render.yaml` at the repo root build a
-single service that serves the API and the built SPA from one origin — no CORS to
-configure, one thing to keep awake. Verified locally: a real review runs through the
-image in 1.5s on the CSS sample (router calls no auditor), at **73 MB** against Render
-free's 512 MB. A single review still holds no state between requests — the one
-exception is `app/memory/`'s SQLite file, a few hundred KB on a named volume, there
-because *across* reviews is exactly what episodic/semantic/long-term memory needs to
-remember. What is left is creating the service and setting `GROQ_API_KEY` — see
+**Live:** https://code-guardian-906520260355.asia-south1.run.app
+
+Deployed on **Google Cloud Run** (`asia-south1`), built from this repo's root
+`Dockerfile` by Cloud Build on every push to `main`. One service serves the API and
+the built SPA from the same origin — no CORS to configure, one thing to keep awake.
+`GROQ_API_KEY` comes from Secret Manager, not an environment variable.
+
+Sized from measurement rather than guesswork: 512 MiB against a measured 73 MB peak,
+concurrency capped at 10 (the default 80 would OOM an LLM service), `min-instances 0`
+so an idle service costs nothing. A verification review on the live URL returned 5
+findings at risk `50/high` for `$0.0025`.
+
+The first request after an idle period pays a few seconds of cold start — the trade
+for scale-to-zero, and a deliberate one.
+
+A single review still holds no state between requests; the one exception is
+`app/memory/`'s SQLite file, which on Cloud Run's ephemeral filesystem resets when the
+container scales to zero. Cross-review memory therefore demonstrates within a warm
+instance, not across a cold start. Making it durable means moving that store to Cloud
+Storage or Postgres — not done, and stated rather than hidden.
+
+Deployment details and the settings behind each number:
 [BUILD_AND_DEPLOY](docs/BUILD_AND_DEPLOY.md).
 
 Deliberately deferred: repo-wide RAG and a sandboxed self-healing patch loop. Each is
