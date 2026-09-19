@@ -7,6 +7,7 @@ command points at: ``uvicorn app.main:app``.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 from pathlib import Path
@@ -226,7 +227,9 @@ async def review_stream(request: ReviewRequest) -> StreamingResponse:
     problem ``anyio.to_thread.run_sync`` solves for the non-streaming endpoint.
     """
     queue: asyncio.Queue = asyncio.Queue()
-    loop = asyncio.get_event_loop()
+    # get_running_loop, not get_event_loop: the producer thread posts onto this
+    # loop from off-thread, so it has to be the one actually serving the request.
+    loop = asyncio.get_running_loop()
     SENTINEL = object()
 
     def produce() -> None:
@@ -250,15 +253,26 @@ async def review_stream(request: ReviewRequest) -> StreamingResponse:
             asyncio.run_coroutine_threadsafe(queue.put((SENTINEL, None)), loop).result()
 
     async def event_source():
-        await anyio.to_thread.run_sync(produce, limiter=_REVIEW_LIMITER)
-        # produce() has already fully populated the queue by the time
-        # run_sync returns (each put is awaited via run_coroutine_threadsafe
-        # before the next one), so draining it here is sequential, not racy.
-        while True:
-            kind, payload = await queue.get()
-            if kind is SENTINEL:
-                return
-            yield f"event: {kind}\ndata: {json.dumps(payload)}\n\n"
+        # The producer runs as a task rather than being awaited here: awaiting it
+        # would finish the whole review before the first event was yielded, which
+        # is a non-streaming endpoint wearing an SSE content-type. Starting it
+        # concurrently and draining as it goes is the entire point of the queue.
+        worker = asyncio.create_task(
+            anyio.to_thread.run_sync(produce, limiter=_REVIEW_LIMITER)
+        )
+        try:
+            while True:
+                kind, payload = await queue.get()
+                if kind is SENTINEL:
+                    return
+                yield f"event: {kind}\ndata: {json.dumps(payload)}\n\n"
+        finally:
+            # On a client disconnect the generator is closed mid-drain. The
+            # worker thread cannot be cancelled (it is blocked in sync LLM
+            # calls), but awaiting it here keeps the limiter slot accounted for
+            # instead of leaking it, and surfaces any error it raised.
+            with contextlib.suppress(Exception):
+                await worker
 
     return StreamingResponse(event_source(), media_type="text/event-stream")
 
