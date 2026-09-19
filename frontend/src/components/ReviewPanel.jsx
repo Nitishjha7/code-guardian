@@ -71,12 +71,7 @@ export default function ReviewPanel({
         <Tab active={tab === 'pr'} onClick={() => setTab('pr')}>
           Pull request
         </Tab>
-        <button
-          onClick={() => fileInput.current?.click()}
-          className="px-3 py-2 text-sm text-slate-500 hover:text-slate-300"
-        >
-          Upload
-        </button>
+
         <input
           ref={fileInput}
           type="file"
@@ -85,10 +80,22 @@ export default function ReviewPanel({
           className="hidden"
         />
 
+        {/* Not a tab — it fills the editor on the Code tab. Sat alongside the
+            tabs before, which made it read as a third view. */}
+        {tab === 'paste' && (
+          <button
+            onClick={() => fileInput.current?.click()}
+            title="Load a file into the editor"
+            className="ml-auto my-1 rounded border border-slate-800 bg-slate-900 px-2 py-1 text-xs text-slate-400 transition hover:border-slate-700 hover:text-slate-200"
+          >
+            Open file…
+          </button>
+        )}
+
         <select
           onChange={(e) => loadSample(e.target.value)}
           value=""
-          className="ml-auto my-1 rounded border border-slate-800 bg-slate-900 px-2 py-1 text-xs text-slate-400 outline-none"
+          className={`${tab === 'paste' ? '' : 'ml-auto'} my-1 rounded border border-slate-800 bg-slate-900 px-2 py-1 text-xs text-slate-400 outline-none`}
         >
           <option value="" disabled>
             sample…
@@ -188,7 +195,7 @@ export default function ReviewPanel({
           </div>
           <p className="text-xs text-slate-600">
             {tokenReady
-              ? 'Reviews the lines the PR adds. Posts nothing — the comment is returned for preview.'
+              ? 'Any public GitHub PR. Reviews only the lines it adds, and posts nothing — the comment is returned here for preview.'
               : 'Needs GITHUB_TOKEN in backend/.env.'}{' '}
             Accepts <code className="text-slate-500">owner/repo#42</code> too.
           </p>
