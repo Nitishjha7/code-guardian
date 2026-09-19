@@ -15,13 +15,8 @@ const AGENTS = [
     kind: 'Router',
     tint: 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300',
     icon: Icon.agents,
-    what: 'An LLM bound to the specialists as tools. It decides at runtime which audits a submission needs — one, both, or neither.',
-    criteria: [
-      'Tool docstrings are the routing logic, written as criteria',
-      'temperature 0 — routing is classification, not creative writing',
-      'looks_high_stakes() forces both auditors on auth/DB/exec surfaces',
-      'force_full_audit bypasses routing entirely',
-    ],
+    what: 'Binds the auditors as tools and picks which ones a submission needs — one, both or neither.',
+    note: 'temperature 0. looks_high_stakes() forces both on auth, DB and exec code.',
   },
   {
     name: 'Security Agent',
@@ -29,13 +24,8 @@ const AGENTS = [
     kind: 'Auditor',
     tint: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
     icon: Icon.shield,
-    what: 'OWASP Top 10, injection, hardcoded secrets, insecure deserialization, weak crypto — with Bandit fused in.',
-    criteria: [
-      'LLM findings merged with Bandit by line containment',
-      'Agreement tags the finding llm+bandit:<rule> and escalates severity',
-      'Bandit cannot hallucinate; the LLM catches what no rule encodes',
-      'Bandit is Python-only — elsewhere the audit is the LLM alone',
-    ],
+    what: 'OWASP Top 10, injection, hardcoded secrets, insecure deserialization, weak crypto.',
+    note: 'Bandit runs alongside; agreed findings are tagged llm+bandit and escalated. Python only.',
   },
   {
     name: 'Performance Agent',
@@ -44,11 +34,7 @@ const AGENTS = [
     tint: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
     icon: Icon.gauge,
     what: 'Algorithmic complexity, N+1 queries, memory growth, unclosed resources, missing caching.',
-    criteria: [
-      'Reports Big-O before and after where it applies',
-      'Explicitly told not to report security issues',
-      'Routing recall here is 50% — the measured weak spot',
-    ],
+    note: 'Reports Big-O before and after. Routing recall measured at 50%.',
   },
   {
     name: 'Patch Generator',
@@ -56,12 +42,8 @@ const AGENTS = [
     kind: 'Synthesis',
     tint: 'border-sky-500/30 bg-sky-500/10 text-sky-300',
     icon: Icon.wrench,
-    what: 'Rewrites the file to fix every finding it safely can, preserving business logic and public API.',
-    criteria: [
-      'The model returns the file; difflib computes the diff',
-      'LLM-authored unified diffs routinely fail to apply',
-      'Unfixable findings get a TODO(code-guardian) comment, not silence',
-    ],
+    what: 'Rewrites the file to fix what it safely can, preserving business logic and public API.',
+    note: 'The model returns the file; difflib computes the diff. Unfixable findings get a TODO.',
   },
   {
     name: 'Test Generator',
@@ -69,12 +51,8 @@ const AGENTS = [
     kind: 'Synthesis',
     tint: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
     icon: Icon.review,
-    what: 'One regression test per Critical/High security finding, written to fail before the fix and pass after.',
-    criteria: [
-      'Generated, never executed — sandboxing is a separate project',
-      'A node, not a tool: "are there findings?" is a boolean, not judgement',
-      'Performance findings excluded — LLM-picked thresholds are flaky',
-    ],
+    what: 'One regression test per Critical/High security finding — fails before the fix, passes after.',
+    note: 'Generated, never executed. Security findings only.',
   },
   {
     name: 'Guardrails',
@@ -82,13 +60,8 @@ const AGENTS = [
     kind: 'Safety',
     tint: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
     icon: Icon.check,
-    what: 'Scans every outbound diff, patch and comment for credentials, and checks the tone of automated review text.',
-    criteria: [
-      '11 secret patterns; secrets are redacted, not dropped',
-      'Placeholder-aware — os.environ[...] is what a fix should look like',
-      'Tone is flagged, never rewritten; silent edits hide prompt regressions',
-      'Guardrails AI optional; engine is always named in the report',
-    ],
+    what: 'Scans every outbound diff, patch and comment for credentials and checks tone.',
+    note: '11 secret patterns; matches are redacted, not dropped. Tone is flagged, never rewritten.',
   },
 ]
 
@@ -106,7 +79,7 @@ export function AgentsPage() {
     <div className="space-y-5">
       <PageHead
         title="Agents"
-        subtitle="Six pieces. The supervisor is the only one the model itself controls."
+        subtitle="The six components of a review, and the compiled graph that runs them."
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -127,14 +100,9 @@ export function AgentsPage() {
 
             <p className="mt-3 text-xs leading-relaxed text-slate-400">{a.what}</p>
 
-            <ul className="mt-3 space-y-1.5 border-t border-slate-800 pt-3">
-              {a.criteria.map((c) => (
-                <li key={c} className="flex gap-2 text-[11px] leading-relaxed text-slate-500">
-                  <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-slate-600" />
-                  {c}
-                </li>
-              ))}
-            </ul>
+            <p className="mt-3 border-t border-slate-800 pt-3 text-[11px] leading-relaxed text-slate-500">
+              {a.note}
+            </p>
           </div>
         ))}
       </div>
@@ -142,8 +110,8 @@ export function AgentsPage() {
       <div className={`${CARD} p-5`}>
         <h3 className="text-sm font-medium text-slate-100">Compiled graph</h3>
         <p className="mt-1 text-xs text-slate-500">
-          Straight from <code>/api/graph</code> — this is the topology the backend is
-          actually running, not a drawing of it.
+          Rendered from <code>/api/graph</code>, so it reflects the compiled graph rather
+          than a separate diagram.
         </p>
         {error ? (
           <p className="mt-3 text-xs text-rose-300">{error}</p>
@@ -167,11 +135,11 @@ export function AnalyticsPage({ entries, onChanged, onGoToReview }) {
         <EmptyCard
           icon={Icon.chart}
           title="No reviews yet"
-          text="Run a review and the numbers here fill in. Nothing is fabricated — every figure comes from a review that actually ran."
+          text="Run a review and the numbers here fill in."
           actions={
             onGoToReview && <EmptyAction onClick={onGoToReview}>Run a review</EmptyAction>
           }
-          note="History lives in this browser's localStorage, not on the server — a review is one request holding no state, so there is nowhere else for it to live. Clearing site data clears this page."
+          note="History is kept in this browser's localStorage. Clearing site data clears this page."
         />
       </div>
     )
