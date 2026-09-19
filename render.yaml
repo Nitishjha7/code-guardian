@@ -1,27 +1,12 @@
 # Render Blueprint — https://render.com/docs/blueprint-spec
 #
-# NOT what runs today. The live deployment is Google Cloud Run:
-#   https://code-guardian-906520260355.asia-south1.run.app
-# This blueprint is kept because it is still correct and still works — Cloud Run
-# was chosen over Render so that all three portfolio projects could share one
-# platform (the sibling Adaptive CRAG peaks at 698 MB, over Render free's 512 MB
-# cap). See docs/BUILD_AND_DEPLOY.md.
+# Not the live deployment. Production runs on Google Cloud Run so that all three
+# portfolio projects share one platform; this blueprint still works and is kept
+# as the alternative. See docs/BUILD_AND_DEPLOY.md.
 #
-# Deploys the single-service image (FastAPI serving both the API and the built
-# React app), so the whole demo lives on one URL with no CORS to configure and
-# only one service to keep awake.
-#
-# There is no managed database here: a review is one graph invocation holding no
-# state of its own, and the PR bot writes its results back to GitHub rather than
-# to a store of its own. app/memory/'s cross-review facts (episodic, semantic,
-# long-term) live in a SQLite file at MEMORY_DB_PATH instead - on this free plan
-# that file sits on the container's ephemeral filesystem, since Render's free
-# tier has no persistent disk, so memory resets on every deploy. Fails open by
-# design; see docs/BUILD_AND_DEPLOY.md's Deployment section for the trade-off.
-#
-# Measured before choosing the free plan: the backend image is 317 MB and peaks
-# well inside the 512 MB limit — no embedding model and no reranker, unlike the
-# Adaptive CRAG project, which had to be moved off Render for exactly that reason.
+# Deploys the single-service image, so API and UI share one URL. No database:
+# app/memory/ uses a SQLite file at MEMORY_DB_PATH, which on the free plan sits
+# on an ephemeral filesystem and resets on deploy. Memory fails open by design.
 
 services:
   - type: web
@@ -33,31 +18,28 @@ services:
     region: singapore
     healthCheckPath: /api/health
     envVars:
-      # Set these in the Render dashboard — never commit real values.
+      # Set in the Render dashboard — never commit real values.
       - key: GROQ_API_KEY
         sync: false
 
-      # Groq retires model ids; check with
+      # Groq retires model ids; verify before a demo with
       #   curl https://api.groq.com/openai/v1/models -H "Authorization: Bearer $GROQ_API_KEY"
-      # before a demo. Must support tool calling — the supervisor depends on it.
+      # Must support tool calling, which the supervisor depends on.
       - key: GUARDIAN_MODEL
         value: openai/gpt-oss-120b
 
-      # Optional. Tried in order if GUARDIAN_MODEL is retired or rate limited.
-      # Same-provider fallback (see backend/app/config.py) - protects against
-      # a dead model id, not against Groq itself being down.
+      # Tried in order if the primary is retired or rate limited. Same-provider,
+      # so this covers a dead model id, not a Groq outage.
       - key: GUARDIAN_FALLBACK_MODELS
         value: openai/gpt-oss-20b
 
-      # Single-service deploy is same-origin, so no cross-origin caller is
-      # expected. Kept narrow rather than "*" because this service will hold a
-      # GitHub token.
+      # Same-origin deploy, so no cross-origin caller is expected. Kept narrow
+      # rather than "*" because this service holds a GitHub token.
       - key: GUARDIAN_CORS_ORIGINS
         value: https://code-guardian.onrender.com
 
-      # Optional — only needed for the PR bot (Phase 2). Without them the review
-      # UI works and /webhook/github fails closed with 503, which is the
-      # intended behaviour, not a misconfiguration.
+      # PR bot only. Without them the review UI works and /webhook/github fails
+      # closed with a 503.
       - key: GITHUB_TOKEN
         sync: false
       - key: GITHUB_WEBHOOK_SECRET

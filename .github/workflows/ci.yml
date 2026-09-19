@@ -1,13 +1,11 @@
 name: tests
 
-# The suite is deliberately LLM-free — it covers the deterministic seams (JSON
-# recovery, diff generation, the routing predicate, the state collector, the
-# guardrails, and the whole webhook surface). So CI needs no GROQ_API_KEY and no
-# GitHub token, and a fork's pull request runs it in full.
+# The suite is LLM-free, covering the deterministic seams: JSON recovery, diff
+# generation, the routing predicate, the state collector, the guardrails and the
+# webhook surface. No API keys needed, so forks run it in full.
 #
-# What this does NOT cover: the agent prompts and the PyGithub calls. Routing
-# quality is measured separately by `backend/evals/`, which does need a key and
-# therefore cannot run here.
+# Not covered: the agent prompts and the PyGithub calls. Routing quality is
+# measured by backend/evals/, which needs a key and runs separately.
 
 on:
   push:
@@ -52,8 +50,8 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      # A build failure here is a real failure: the deploy image builds the same
-      # bundle, so a broken frontend would only surface at deploy time otherwise.
+      # The deploy image builds the same bundle, so a break caught here would
+      # otherwise surface only at deploy time.
       - name: Build
         working-directory: frontend
         run: npm run build
@@ -64,9 +62,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Builds the single-service image the Render blueprint deploys. Not pushed
-      # anywhere — the point is to fail here rather than on Render, where the
-      # feedback loop is minutes long and the failure is public.
+      # The single-service deploy image. Not pushed anywhere; building it here
+      # catches breakage before a deploy does.
       - name: Build the single-service image
         run: docker build -f Dockerfile -t code-guardian:ci .
 
@@ -77,8 +74,7 @@ jobs:
             if curl -fsS http://localhost:8000/api/health >/dev/null 2>&1; then
               echo "healthy after ${i}s"
               curl -s http://localhost:8000/api/health
-              # The SPA has to be served from the same origin, or the whole
-              # reason for the single-service image is gone.
+              # Same-origin SPA is the point of this image, so check it serves.
               test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/)" = "200"
               echo "SPA served from the same origin"
               exit 0

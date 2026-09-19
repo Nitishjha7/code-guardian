@@ -10,10 +10,8 @@ services:
     ports:
       - "8010:8000"
     volumes:
-      # Cross-review memory (app/memory/) - a SQLite file, not a service, so
-      # a named volume is all persistence needs here. Losing it just means
-      # memory starts cold again; nothing in this project depends on it
-      # surviving, per app/memory/__init__.py's fail-open design.
+      # app/memory/'s SQLite file. Losing the volume just means memory starts
+      # cold; nothing depends on it surviving.
       - guardian_memory:/data
     restart: unless-stopped
     healthcheck:
