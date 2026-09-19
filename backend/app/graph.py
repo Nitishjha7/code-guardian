@@ -115,11 +115,8 @@ def collect_node(state: ReviewerState) -> dict:
     security.sort(key=lambda f: _SEVERITY_ORDER.get(f.get("severity", "Medium"), 2))
     performance.sort(key=lambda f: _SEVERITY_ORDER.get(f.get("severity", "Medium"), 2))
 
-    # Cross-review memory (app/memory/): annotate each finding with precedent
-    # before anything downstream renders it. This is read-only lookup -
-    # writing the episode this review becomes happens once, at the end of
-    # run_review/run_review_stream, after we know whether patch_node actually
-    # fixed it.
+    # Read-only precedent lookup. Writing this review's own episode happens at
+    # the end of run_review, once patch_node has decided whether it was fixed.
     source_code = state.get("source_code", "")
     for finding in security + performance:
         title = finding.get("title", "")
@@ -465,10 +462,8 @@ def run_review(
 # Streaming
 # --------------------------------------------------------------------------- #
 
-# What each node is worth telling a viewer, keyed by the same names used in
-# ``build_graph``. This is presentation text only - the node functions above
-# stay exactly as they were for ``run_review``, so a caller that doesn't want
-# streaming pays nothing for it.
+# Presentation text only, keyed by the node names in ``build_graph``. The node
+# functions are untouched, so non-streaming callers pay nothing for this.
 _NODE_LABELS = {
     "supervisor": "Supervisor deciding which auditors this diff needs",
     "tools": "Running the routed auditor(s)",
@@ -515,10 +510,8 @@ def run_review_stream(
     }
 
     for update in get_graph().stream(state, config={"recursion_limit": 12}, stream_mode="updates"):
-        # ``update`` is ``{node_name: partial_state}`` - a conditional edge or a
-        # loop back through "tools" means a node can appear more than once, so
-        # this merges rather than replaces, exactly like LangGraph does
-        # internally for the fields each node actually returns.
+        # ``{node_name: partial_state}``. A node can appear more than once (the
+        # tools loop), so merge rather than replace.
         for node_name, partial in update.items():
             state.update(partial)
             yield "progress", {

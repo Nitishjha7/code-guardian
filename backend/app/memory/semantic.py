@@ -1,17 +1,13 @@
 """Semantic memory: facts distilled from clusters of episodes.
 
-Built on top of episodic memory, not independent of it - same relationship
-as self-healing-sql-agent's semantic memory to its episodic memory. An
-episode is one data point ("this snippet, this finding, this verdict"); a
-semantic fact is what several episodes sharing a signature prefix collapse
-into, once there are enough of them to call it a pattern rather than noise.
+Built on episodic memory rather than beside it. An episode is one data point
+("this snippet, this finding, this verdict"); a fact is what several episodes
+sharing a signature prefix collapse into, once there are enough to call it a
+pattern rather than noise.
 
-Deliberately not automatic. Running this after every single review would
-mean re-deriving the same fact from the same growing pile of episodes on
-every request - wasted work, and a fact that "distilled itself" after every
-review is not meaningfully distilled. ``consolidate_facts`` is a periodic,
-explicitly-invoked job (a cron, an admin endpoint, or a one-off script) - the
-same category of thing as self-healing-sql-agent's ``consolidate_facts``.
+``consolidate_facts`` is a periodic job, not something every review runs. It is
+a GROUP BY over the whole episodes table — a per-request cost for an answer that
+only changes once new episodes accumulate.
 """
 
 from __future__ import annotations
@@ -31,12 +27,9 @@ _MIN_EPISODES_FOR_FACT = 3
 def consolidate_facts() -> int:
     """Scan episodes for signatures repeatedly dismissed, write a fact for each.
 
-    Returns the number of new/updated facts written. Deterministic on
-    purpose - no LLM call. Unlike self-healing-sql-agent's semantic memory
-    (which needs an LLM to describe a *novel* error pattern in words), the
-    fact here is a direct aggregate of a title and a dismissal count, so
-    reaching for a model would add a paid call and nondeterminism to
-    something a `GROUP BY` already answers exactly.
+    Returns the number of facts written or updated. No LLM call: the fact is a
+    title plus a dismissal count, which a ``GROUP BY`` answers exactly. A model
+    would add cost and nondeterminism for nothing.
     """
     conn = get_connection()
     if conn is None:

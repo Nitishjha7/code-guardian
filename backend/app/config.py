@@ -26,15 +26,10 @@ class Settings(BaseSettings):
     guardian_model: str = "openai/gpt-oss-120b"
     guardian_cors_origins: str = "http://localhost:5173,http://localhost:3000"
 
-    # A gateway needs somewhere to fail over *to*. Empty by default - a single
-    # model is the honest default for a project with one Groq key, and this
-    # only turns on when a fallback list is actually configured. See
-    # get_llm() for why this is one model, not a chain: this project has one
-    # provider, one key, so a genuine cross-provider gateway is not being
-    # simulated here.
+    # Comma-separated Groq ids to fall back to. Empty by default — same-provider
+    # fallback only; see get_llm().
     guardian_fallback_models: str = ""
 
-    # Phase 2
     github_token: str = ""
     github_webhook_secret: str = ""
 
@@ -59,50 +54,27 @@ def _client(model: str, temperature: float, settings: Settings) -> ChatGroq:
         temperature=temperature,
         max_retries=2,
         timeout=120,
-        # Bound once, here, rather than passed at every one of the five call
-        # sites — see app/token_usage.py for why one stateless callback
-        # instance shared across every cached client is the correct scope,
-        # and app/graph.py for where the per-review tracker it reads from
-        # actually gets set.
+        # One stateless callback shared by every cached client; the per-review
+        # tracker it writes to is set in graph.py.
         callbacks=[TRACKING_CALLBACK],
     )
 
 
 @lru_cache(maxsize=4)
 def get_llm(temperature: float = 0.0):
-    """Return the shared LLM client - a fallback chain when one is configured,
-    a single ``ChatGroq`` otherwise.
+    """The shared LLM client: a ``with_fallbacks`` chain when
+    ``GUARDIAN_FALLBACK_MODELS`` is set, a single ``ChatGroq`` otherwise.
 
-    Cached per temperature so the supervisor (0.0) and the patch generator
-    (which may want a little slack) do not each open their own client.
+    Cached per temperature so callers do not each open their own client.
 
-    **Why a gateway matters here specifically:** this project has already hit
-    a dead model id in production (docs/BUILD_AND_DEPLOY.md - Groq retired
-    ``llama-3.3-70b-versatile`` mid-project, a 404 no mock ever caught). A
-    retired or rate-limited model is not a bug in the code, and every one of
-    the five callers below has no way to tell the difference between "the
-    model is gone" and "my prompt is wrong" unless something sits in front of
-    the client and retries elsewhere.
+    The gateway exists because Groq retired ``llama-3.3-70b-versatile``
+    mid-project and every audit started 404ing — a failure no mock had caught.
+    ``with_fallbacks`` rather than try/except at each call site because it
+    returns a Runnable that still answers ``.bind_tools()``, which
+    ``supervisor.py`` depends on.
 
-    ``with_fallbacks`` was chosen over a hand-rolled try/except around every
-    call site for one reason: it returns something that still satisfies the
-    same interface every caller already depends on. ``supervisor.py`` calls
-    ``.bind_tools(TOOLS)`` on whatever this returns - a fallback chain has to
-    survive that call unchanged, or the gateway would only work for the four
-    callers that just call ``.invoke()`` and silently break the one caller
-    that matters most. Verified directly against the pinned
-    ``langchain-core==0.3.29``: ``RunnableWithFallbacks.bind_tools(...)``
-    returns another bindable, invokable Runnable - not a plain ChatGroq, but
-    every caller here only ever calls ``.bind_tools()`` or ``.invoke()``, both
-    of which the wrapper honours.
-
-    **Only one provider.** ``GUARDIAN_FALLBACK_MODELS`` is a list of Groq
-    model ids, not other providers - this account has one Groq key, so a
-    genuine multi-provider gateway would need a second vendor's key this
-    project does not have. Falling over to a second Groq model is real
-    protection against a retired or saturated model id; it is not protection
-    against Groq itself being down. Overclaiming that distinction is the
-    difference between describing a gateway and describing this one.
+    Fallbacks are other **Groq** ids, so this protects against a dead or
+    saturated model, not against Groq being down.
     """
     settings = get_settings()
     if not settings.groq_api_key:

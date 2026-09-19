@@ -6,8 +6,7 @@ identity this project has - there is no user account, no login, and a
 review triggered through the ad-hoc ``/api/review`` endpoint has no repo at
 all and simply gets no preferences applied (empty scope, not an error).
 
-Never inferred from a review's content, same rule as
-self-healing-sql-agent's long-term memory: a preference exists only because
+Never inferred from a review's content: a preference exists only because
 something explicitly called ``set_preference``.
 """
 

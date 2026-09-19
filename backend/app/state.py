@@ -1,12 +1,7 @@
 """The graph's shared state.
 
-This mirrors ``ReviewerState`` in docs/TECHNICAL_SPEC.md, with two additions the
-spec's sketch left implicit:
-
-* ``messages`` — the supervisor is a tool-calling loop, so it needs a message
-  history with the standard ``add_messages`` reducer.
-* ``force_full_audit`` — the "high-stakes override" mitigation from §3a. When
-  true the router is bypassed and both auditors are run unconditionally.
+``messages`` carries the supervisor's tool-calling history; ``force_full_audit``
+bypasses the router and runs both auditors unconditionally.
 """
 
 from __future__ import annotations
@@ -33,15 +28,13 @@ class Finding(TypedDict, total=False):
     line_hint: str
     explanation: str
     recommendation: str
-    # Which engine produced this: "llm", "bandit:B608", or "llm+bandit:B608"
-    # when both found it independently.
+    # "llm", "bandit:B608", or "llm+bandit:B608" when both found it independently
     source: str
     # Performance agent only:
     complexity_before: str
     complexity_after: str
-    # Set by app/memory/ - precedent text if this exact finding on this exact
-    # snippet shape has been seen before. Empty string, not absent, when
-    # memory is off or nothing matched - see graph.py's collect_node.
+    # Precedent from app/memory/ if this finding has been seen on this code shape
+    # before. Empty string when memory is off or nothing matched.
     memory_note: str
 
 
@@ -61,40 +54,23 @@ class ReviewerState(TypedDict, total=False):
     guardrail_report: dict[str, Any]
     routed_to: list[str]
 
-    # Audits that were invoked but never produced a result (bad key, dead model,
-    # rate limit). Kept separate from "audited and found nothing" so that a
-    # failed audit can never be rendered as a clean pass.
+    # Invoked but produced no result (bad key, dead model, rate limit). Separate
+    # from "audited and found nothing" so a failed audit is never rendered as a
+    # clean pass.
     failed_audits: list[str]
     audit_errors: list[str]
 
-    # Weighted risk score computed once in collect_node - see app/risk.py.
-    # Marked incomplete rather than low when an audit failed.
     risk: dict[str, Any]
 
-    # Regression tests written for Critical/High security findings.
-    # Generated only - never executed; see app/agents/test_generator.py.
     generated_tests: str
     tests_note: str
-
-    # Audits that were invoked but never produced a result (bad key, dead model,
-    # rate limit). Kept separate from "found nothing" so a failed audit can never
-    # be rendered as a clean pass.
-    failed_audits: list[str]
-    audit_errors: list[str]
 
     force_full_audit: bool
     logs: Annotated[list[str], operator.add]
 
-    # Tokens and estimated cost across every agent call in this review, keyed
-    # by which model actually answered (the fallback model, if one fired) -
-    # see app/token_usage.py for why this is tracked per-review rather than
-    # per-agent.
     token_usage: dict[str, Any]
 
-    # Cross-review memory - see app/memory/. ``repo_id`` is
-    # PullRequestRef.repo_full_name when this review came from the PR bot
-    # webhook, empty for an ad-hoc /api/review call (no repo, no long-term
-    # scope, and that is fine - preferences are additive, not required).
-    # ``memory_notes`` is precedent text folded into each finding by
-    # collect_node, not a separate node output - see graph.py.
+    # PullRequestRef.repo_full_name on the webhook path, empty for an ad-hoc
+    # /api/review call. Scopes long-term memory; absence just means no
+    # preferences apply.
     repo_id: str

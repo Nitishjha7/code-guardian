@@ -1,10 +1,7 @@
 """Lazy, fail-open SQLite connection shared by episodic/semantic/long-term memory.
 
-Mirrors the lazy-singleton pattern used everywhere else optional
-infrastructure appears in this kind of project (see
-self-healing-sql-agent's ``app/checkpointer.py`` for the sibling pattern this
-was modeled on): try once, cache the result including failure, never crash
-the caller.
+Try once, cache the result including failure, never crash the caller — memory is
+optional and a review must run without it.
 """
 
 from __future__ import annotations
@@ -85,7 +82,7 @@ def get_connection() -> sqlite3.Connection | None:
 
 
 def reset_for_tests() -> None:
-    """Test-only hook, mirrors the sibling project's ``reset_for_tests``."""
+    """Test-only: drop the cached connection so the next call reopens."""
     global _conn, _tried
     with _lock:
         if _conn is not None:
