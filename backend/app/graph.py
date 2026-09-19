@@ -30,6 +30,7 @@ from .memory.episodic import (
     recall_similar,
     record_episode_from_result,
 )
+from .memory import long_term
 from .memory.semantic import format_facts_for_prompt, recall_facts
 from .metrics import REVIEW_DURATION_SECONDS, record_review
 from .state import Finding, ReviewerState
@@ -427,6 +428,9 @@ def run_review(
     # The tools read the submission from module state rather than taking it as a
     # tool argument - see the note in app/agents/supervisor.py.
     supervisor.set_current_input(source_code, language)
+    # Empty for an ad-hoc /api/review with no repo: the auditors then run with
+    # their base prompts, which is the correct behaviour, not a degraded one.
+    long_term.set_current(long_term.get_preferences(repo_id))
     tracker = new_tracker()
 
     initial: ReviewerState = {
@@ -496,6 +500,7 @@ def run_review_stream(
     """
     started = time.perf_counter()
     supervisor.set_current_input(source_code, language)
+    long_term.set_current(long_term.get_preferences(repo_id))
     tracker = new_tracker()
 
     state: ReviewerState = {

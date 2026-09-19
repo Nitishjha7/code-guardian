@@ -67,6 +67,15 @@ class ReviewRequest(BaseModel):
             "high-stakes paths where a false negative is unacceptable."
         ),
     )
+    repo_id: str = Field(
+        default="",
+        max_length=200,
+        description=(
+            "Optional 'owner/repo'. Applies that repository's stored preferences "
+            "(PUT /api/preferences/{repo_id}) and attributes the recorded episode "
+            "to it. Empty means an ad-hoc review with no repository context."
+        ),
+    )
 
 
 class Finding(BaseModel):
@@ -183,6 +192,7 @@ async def review(request: ReviewRequest) -> ReviewResponse:
                 source_code=request.source_code,
                 language=request.language,
                 force_full_audit=request.force_full_audit,
+                repo_id=request.repo_id,
             ),
             limiter=_REVIEW_LIMITER,
         )
@@ -238,6 +248,7 @@ async def review_stream(request: ReviewRequest) -> StreamingResponse:
                 source_code=request.source_code,
                 language=request.language,
                 force_full_audit=request.force_full_audit,
+                repo_id=request.repo_id,
             ):
                 if kind == "done":
                     payload = _review_response(payload, request.language).model_dump()

@@ -11,6 +11,7 @@ import logging
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from ..config import get_llm
+from ..memory import long_term
 from ..state import Finding
 from . import static_analysis
 from ._common import parse_json_list, truncate
@@ -61,7 +62,7 @@ def audit(source_code: str, language: str) -> list[Finding]:
     llm = get_llm(temperature=0.0)
     response = llm.invoke(
         [
-            SystemMessage(content=SYSTEM_PROMPT),
+            SystemMessage(content=SYSTEM_PROMPT + long_term.current_prompt_block()),
             HumanMessage(
                 content=f"Language: {language}\n\nCode under review:\n```{language}\n"
                 f"{truncate(source_code)}\n```"
