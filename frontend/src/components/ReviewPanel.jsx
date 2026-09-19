@@ -157,7 +157,10 @@ export default function ReviewPanel({
             </label>
 
             <button
-              onClick={onRun}
+              // Called with no argument on purpose — onRun falls back to the
+              // editor's current state. Passing the click event through would
+              // land it in the submission parameter.
+              onClick={() => onRun()}
               disabled={loading || !code.trim()}
               className="ml-auto rounded bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
             >

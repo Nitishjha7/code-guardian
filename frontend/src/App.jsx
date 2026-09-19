@@ -16,11 +16,18 @@ import { LastReviewSummary, RecentActivity } from './components/Summary'
 import {
   AgentsPage,
   AnalyticsPage,
+  EmptyAction,
   EmptyCard,
+  ExtLink,
   PageHead,
   SettingsPage,
   TokenGatedPage,
 } from './pages/Pages'
+
+// The pull request this bot was verified on. Used as the one-click example on
+// the Pull Requests page — an empty page that can demonstrate itself is worth
+// more than one that only explains itself.
+const DEMO_PR = 'https://github.com/Nitishjha7/code-guardian/pull/1'
 
 export default function App() {
   const [page, setPage] = useHashPage()
@@ -62,18 +69,28 @@ export default function App() {
 
   const tokenReady = backend?.pr_bot?.github_token_configured
 
-  async function runReview() {
+  /**
+   * `submission` is passed explicitly by the one-click sample runners. Reading
+   * it from state instead would review whatever was loaded *before* the click,
+   * because `setCode` has not flushed by the time this runs.
+   */
+  async function runReview(submission) {
+    const src = submission?.code ?? code
+    const lang = submission?.language ?? language
+    const name = submission?.filename ?? filename
+    const full = submission?.forceFullAudit ?? forceFullAudit
+
     setLoading(true)
     setError(null)
     setPrResult(null)
     setCompletedNodes(new Set())
     try {
-      const data = await reviewStream({ sourceCode: code, language, forceFullAudit }, (event) =>
+      const data = await reviewStream({ sourceCode: src, language: lang, forceFullAudit: full }, (event) =>
         setCompletedNodes((prev) => new Set(prev).add(event.node)),
       )
       setResult(data)
-      setReviewedSource(code)
-      setEntries(record(fromReview(data, { label: filename, language })))
+      setReviewedSource(src)
+      setEntries(record(fromReview(data, { label: name, language: lang })))
       setPage('review')
       requestAnimationFrame(() =>
         resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
@@ -84,6 +101,17 @@ export default function App() {
       setLoading(false)
       setCompletedNodes(new Set())
     }
+  }
+
+  /** Load a bundled sample into the editor and review it in one action. */
+  function trySample(id) {
+    const sample = SAMPLES.find((s) => s.id === id)
+    if (!sample) return
+    setCode(sample.code)
+    setLanguage(sample.language)
+    setFilename(sample.filename)
+    setForceFullAudit(false)
+    runReview({ ...sample, forceFullAudit: false })
   }
 
   async function runPRReview(url) {
@@ -180,7 +208,7 @@ export default function App() {
                       <PatchView result={result} original={reviewedSource} />
                     </>
                   )}
-                  {!result && !loading && <FirstRunHint />}
+                  {!result && !loading && <FirstRunHint onTry={trySample} />}
                 </div>
               </div>
 
@@ -212,14 +240,33 @@ export default function App() {
                 <EmptyCard
                   icon={Icon.pr}
                   title="Paste a PR link above to review it"
-                  text="Only the lines a PR adds are reviewed — flagging untouched code is noise the author cannot act on. This page posts nothing; it returns the comment the webhook bot would post, for preview. Try: https://github.com/Nitishjha7/code-guardian/pull/1"
+                  text="Only the lines a PR adds are reviewed — flagging untouched code the author cannot act on in this PR is noise. This page posts nothing: it returns the comment the webhook bot would have posted, for preview."
+                  actions={
+                    <>
+                      <EmptyAction onClick={() => runPRReview(DEMO_PR)}>
+                        Review {DEMO_PR.replace('https://github.com/', '')}
+                      </EmptyAction>
+                      <ExtLink href={DEMO_PR}>Open that PR on GitHub</ExtLink>
+                    </>
+                  }
+                  note={
+                    <>
+                      That PR is where this bot was verified end to end — the webhook
+                      fired, the review ran on Cloud Run, and the comment it posted is
+                      still there. The same code path produces the preview above.
+                    </>
+                  }
                 />
               )}
             </TokenGatedPage>
           )}
 
           {page === 'history' && (
-            <AnalyticsPage entries={entries} onChanged={setEntries} />
+            <AnalyticsPage
+              entries={entries}
+              onChanged={setEntries}
+              onGoToReview={() => setPage('review')}
+            />
           )}
 
           {page === 'agents' && <AgentsPage />}
@@ -245,26 +292,66 @@ function Working({ label = 'Routing the submission…' }) {
 }
 
 /** Shown before the first run: what to try, and what to watch for. */
-function FirstRunHint() {
+/**
+ * The Review page before anything has run. Deliberately not a bare "no results"
+ * box: each row loads a sample *and* runs it, because the routing decision is
+ * the thing worth seeing and it costs one click to show rather than describe.
+ */
+function FirstRunHint({ onTry }) {
+  const rows = [
+    {
+      id: 'vulnerable-python',
+      label: 'Vulnerable Python',
+      expect: 'both auditors',
+      text: 'Findings marked ✓ were flagged by the LLM and by Bandit independently — agreement escalates severity.',
+      tone: 'text-rose-300',
+    },
+    {
+      id: 'plain-css',
+      label: 'Plain CSS',
+      expect: 'no auditor',
+      text: 'The router calls nothing at all and the run costs one LLM call instead of four. That decision is the project.',
+      tone: 'text-emerald-300',
+    },
+    {
+      id: 'slow-js',
+      label: 'Slow JavaScript',
+      expect: 'performance only',
+      text: 'One auditor, not both — the router reads the submission rather than fanning out.',
+      tone: 'text-amber-300',
+    },
+  ]
+
   return (
-    <div className={`${CARD} px-4 py-4`}>
-      <p className="text-sm text-slate-300">
-        Load a sample above and hit <b className="text-slate-100">Review</b>.
-      </p>
-      <ul className="mt-3 space-y-1.5 text-xs text-slate-500">
-        <li>
-          <b className="text-slate-400">Vulnerable Python</b> — both auditors run;
-          findings marked <span className="text-emerald-400">✓</span> were flagged by
-          the LLM and Bandit independently.
-        </li>
-        <li>
-          <b className="text-slate-400">Plain CSS</b> — the router calls no auditor at
-          all. The strip above shows both as <i>skipped</i>; that decision is the point.
-        </li>
-        <li>
-          <b className="text-slate-400">Slow JavaScript</b> — performance only.
-        </li>
-      </ul>
+    <div className={`${CARD} overflow-hidden`}>
+      <div className="border-b border-slate-800 px-4 py-3">
+        <p className="text-sm font-medium text-slate-200">Run one to see the router decide</p>
+        <p className="mt-0.5 text-xs text-slate-500">
+          Three submissions, three different routing outcomes. Each loads and runs in one click.
+        </p>
+      </div>
+      <div className="divide-y divide-slate-800">
+        {rows.map((r) => (
+          <button
+            key={r.id}
+            onClick={() => onTry(r.id)}
+            className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-slate-800/40"
+          >
+            <span className="mt-0.5 shrink-0 text-slate-600">
+              <Icon.review width={14} height={14} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex flex-wrap items-center gap-2">
+                <b className="text-sm text-slate-200">{r.label}</b>
+                <code className={`rounded bg-slate-800/80 px-1.5 py-0.5 text-[10px] ${r.tone}`}>
+                  expects: {r.expect}
+                </code>
+              </span>
+              <span className="mt-1 block text-xs leading-relaxed text-slate-500">{r.text}</span>
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

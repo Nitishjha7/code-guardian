@@ -159,7 +159,7 @@ export function AgentsPage() {
 
 /* --------------------------------------------------------------- Analytics */
 
-export function AnalyticsPage({ entries, onChanged }) {
+export function AnalyticsPage({ entries, onChanged, onGoToReview }) {
   if (entries.length === 0) {
     return (
       <div className="space-y-5">
@@ -168,6 +168,10 @@ export function AnalyticsPage({ entries, onChanged }) {
           icon={Icon.chart}
           title="No reviews yet"
           text="Run a review and the numbers here fill in. Nothing is fabricated — every figure comes from a review that actually ran."
+          actions={
+            onGoToReview && <EmptyAction onClick={onGoToReview}>Run a review</EmptyAction>
+          }
+          note="History lives in this browser's localStorage, not on the server — a review is one request holding no state, so there is nowhere else for it to live. Clearing site data clears this page."
         />
       </div>
     )
@@ -383,11 +387,48 @@ export function SettingsPage({ backend }) {
             />
           </dl>
           <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] leading-relaxed text-slate-500">
-            Both are set in <code className="text-slate-400">backend/.env</code>. The
-            webhook <b className="text-slate-400">fails closed</b>: with no secret it
-            returns 503 and processes nothing, because a public URL that runs LLM calls
-            and writes comments is a denial-of-wallet vector.
+            Injected from Google Secret Manager on the deployed service, and from{' '}
+            <code className="text-slate-400">backend/.env</code> locally — never as a
+            plain environment variable in either case. The webhook{' '}
+            <b className="text-slate-400">fails closed</b>: with no secret it returns
+            503 and processes nothing, because a public URL that runs LLM calls and
+            writes comments is a denial-of-wallet vector.
           </p>
+          {bot.github_token_configured && bot.webhook_secret_configured && (
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-800 pt-4">
+              <span className="text-[11px] text-slate-500">
+                Verified end to end on a real pull request:
+              </span>
+              <ExtLink href="https://github.com/Nitishjha7/code-guardian/pull/1">
+                PR #1 — the review this bot posted
+              </ExtLink>
+            </div>
+          )}
+        </div>
+
+        <div className={`${CARD} p-5 lg:col-span-2`}>
+          <h3 className="text-sm font-medium text-slate-100">Deployment</h3>
+          <dl className="mt-4 grid gap-3 text-xs sm:grid-cols-2">
+            <Field label="Platform" value="Google Cloud Run · asia-south1" />
+            <Field label="Build" value="Cloud Build on push to main" />
+            <Field label="Memory / CPU" value="512 MiB · 1 vCPU" />
+            <Field label="Scaling" value="min 0 · max 3 · concurrency 10" />
+          </dl>
+          <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] leading-relaxed text-slate-500">
+            <b className="text-slate-400">min-instances 0</b> means the service scales
+            to zero and costs nothing idle — the trade is a few seconds of cold start on
+            the first request. Concurrency is capped at 10 rather than the default 80,
+            which would exhaust 512 MiB under parallel LLM calls. Memory was chosen from
+            a measured 73 MB peak, not guessed.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <ExtLink href="https://github.com/Nitishjha7/code-guardian">
+              Source on GitHub
+            </ExtLink>
+            <ExtLink href="https://github.com/Nitishjha7/code-guardian/blob/main/docs/BUILD_AND_DEPLOY.md">
+              How it is deployed
+            </ExtLink>
+          </div>
         </div>
       </div>
     </div>
@@ -433,9 +474,9 @@ export function PageHead({ title, subtitle, action }) {
   )
 }
 
-export function EmptyCard({ icon: Ico, title, text, code }) {
+export function EmptyCard({ icon: Ico, title, text, code, actions, note }) {
   return (
-    <div className={`${CARD} px-6 py-14 text-center`}>
+    <div className={`${CARD} px-6 py-12 text-center`}>
       <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl border border-slate-800 bg-slate-900 text-slate-600">
         <Ico width={22} height={22} />
       </span>
@@ -446,7 +487,45 @@ export function EmptyCard({ icon: Ico, title, text, code }) {
           {code}
         </pre>
       )}
+      {actions && <div className="mt-5 flex flex-wrap justify-center gap-2">{actions}</div>}
+      {note && (
+        <p className="mx-auto mt-5 max-w-md border-t border-slate-800 pt-4 text-[11px] leading-relaxed text-slate-600">
+          {note}
+        </p>
+      )}
     </div>
+  )
+}
+
+/** Primary action inside an empty state — a button that fills the page's gap. */
+export function EmptyAction({ onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      className="rounded-lg border border-sky-500/40 bg-sky-500/10 px-3.5 py-2 text-xs font-medium text-sky-300 transition hover:bg-sky-500/20"
+    >
+      {children}
+    </button>
+  )
+}
+
+/**
+ * External link. Always `target="_blank"` with `rel="noopener noreferrer"` —
+ * without noreferrer the opened tab can reach back through `window.opener`.
+ */
+export function ExtLink({ href, children, className = '' }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3.5 py-2 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:bg-slate-800 hover:text-slate-100 ${className}`}
+    >
+      {children}
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-60">
+        <path d="M7 17 17 7M9 7h8v8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </a>
   )
 }
 
