@@ -2,11 +2,17 @@
 
 Built on episodic memory rather than beside it. An episode is one data point
 ("this snippet, this finding, this verdict"); a fact is what several episodes
-sharing a signature prefix collapse into, once there are enough to call it a
-pattern rather than noise.
+sharing a signature collapse into, once there are enough to call it a pattern
+rather than noise.
+
+Both verdicts produce a fact, and they say different things. A finding
+repeatedly *fixed* is a recurring defect worth flagging early; one repeatedly
+*dismissed* is a likely false positive for this codebase. An earlier version
+consolidated only dismissals, which meant that in normal use - where the patch
+generator almost always changes something - no fact was ever written.
 
 ``consolidate_facts`` is a periodic job, not something every review runs. It is
-a GROUP BY over the whole episodes table — a per-request cost for an answer that
+a GROUP BY over the whole episodes table - a per-request cost for an answer that
 only changes once new episodes accumulate.
 """
 
@@ -19,16 +25,30 @@ from .store import get_connection
 
 log = logging.getLogger(__name__)
 
-# Below this many episodes sharing a signature, a repeated dismissal is just
-# as likely to be coincidence as a real pattern - not worth stating as fact.
+# Below this many episodes sharing a signature, a repeated verdict is as
+# likely to be coincidence as a real pattern - not worth stating as fact.
 _MIN_EPISODES_FOR_FACT = 3
 
 
+def _fact_text(title: str, verdict: str, count: int) -> str:
+    """The sentence a cluster of episodes collapses into."""
+    if verdict == "dismissed":
+        return (
+            f'"{title}" on this code shape was reported {count} times and never '
+            "followed by a fix - likely a false positive for this codebase."
+        )
+    return (
+        f'"{title}" on this code shape was found and fixed {count} times - '
+        "a recurring defect in this codebase."
+    )
+
+
 def consolidate_facts() -> int:
-    """Scan episodes for signatures repeatedly dismissed, write a fact for each.
+    """Scan episodes for repeated (signature, finding, verdict) clusters and
+    write a fact for each.
 
     Returns the number of facts written or updated. No LLM call: the fact is a
-    title plus a dismissal count, which a ``GROUP BY`` answers exactly. A model
+    title, a verdict and a count, which a ``GROUP BY`` answers exactly. A model
     would add cost and nondeterminism for nothing.
     """
     conn = get_connection()
@@ -36,21 +56,26 @@ def consolidate_facts() -> int:
         return 0
     try:
         rows = conn.execute(
-            "SELECT signature, finding_title, COUNT(*) as n "
-            "FROM episodes WHERE verdict = 'dismissed' "
-            "GROUP BY signature, finding_title HAVING n >= ?",
+            "SELECT signature, finding_title, verdict, COUNT(*) as n "
+            "FROM episodes GROUP BY signature, finding_title, verdict "
+            "HAVING n >= ?",
             (_MIN_EPISODES_FOR_FACT,),
         ).fetchall()
         written = 0
-        for signature, title, count in rows:
+        for signature, title, verdict, count in rows:
             prefix = signature.split(":", 1)[0]
-            fact = (
-                f'"{title}" on this code shape was reported {count} times and '
-                f"never followed by a fix - likely a false positive for this codebase."
-            )
+            fact = _fact_text(title, verdict, count)
+            # Keyed on the verdict too, not just (prefix, title): one snippet
+            # can accumulate a "fixed" cluster and a "dismissed" cluster for the
+            # same finding, and they say opposite things. Keying on the pair
+            # alone would let the second overwrite the first on every run. The
+            # schema has no verdict column, so the marker is matched in the fact
+            # text - the count in it changes between runs, the marker does not.
+            marker = "never followed by a fix" if verdict == "dismissed" else "found and fixed"
             existing = conn.execute(
-                "SELECT id FROM semantic_facts WHERE signature_prefix = ? AND finding_title = ?",
-                (prefix, title),
+                "SELECT id FROM semantic_facts WHERE signature_prefix = ? "
+                "AND finding_title = ? AND fact LIKE ?",
+                (prefix, title, f"%{marker}%"),
             ).fetchone()
             if existing:
                 conn.execute(
@@ -83,8 +108,12 @@ def recall_facts(source_code_signature_prefix: str, finding_title: str = "") -> 
         return []
     try:
         if finding_title:
+            # Case-insensitive: the same defect comes back as "Hardcoded
+            # database password" one run and "Hardcoded Database Password" the
+            # next, and an exact match silently loses the fact.
             rows = conn.execute(
-                "SELECT fact FROM semantic_facts WHERE signature_prefix = ? AND finding_title = ?",
+                "SELECT fact FROM semantic_facts WHERE signature_prefix = ? "
+                "AND LOWER(finding_title) = LOWER(?)",
                 (source_code_signature_prefix, finding_title),
             ).fetchall()
         else:

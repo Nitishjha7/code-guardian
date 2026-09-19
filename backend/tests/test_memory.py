@@ -144,7 +144,9 @@ class TestSemantic:
         assert len(facts) == 1
         assert "3 times" in facts[0]
 
-    def test_consolidate_ignores_fixed_episodes(self):
+    def test_consolidate_covers_fixed_episodes_too(self):
+        """Consolidation once read only dismissals, so in normal use - where
+        the patch generator does change the code - it never wrote a fact."""
         for _ in range(semantic._MIN_EPISODES_FOR_FACT):
             episodic.record_episode(
                 signature=episodic.make_signature("code", "finding"),
@@ -153,7 +155,7 @@ class TestSemantic:
                 severity="Low",
                 verdict=episodic.VERDICT_FIXED,
             )
-        assert semantic.consolidate_facts() == 0
+        assert semantic.consolidate_facts() == 1
 
     def test_recall_facts_empty_when_none_recorded(self):
         assert semantic.recall_facts("nonexistent") == []
@@ -315,3 +317,84 @@ class TestPreferencesReachTheAuditors:
         graph_module.run_review("x = 1", "python", repo_id="")
 
         assert seen["block"] == ""
+
+
+class TestSemanticConsolidatesBothVerdicts:
+    """Consolidation used to read only ``verdict='dismissed'``.
+
+    A finding is recorded as dismissed only when the patch generator returns
+    the code unchanged, which in practice almost never happens - so with 113
+    real episodes in the local database, ``semantic_facts`` was still empty.
+    The layer shipped, was tested, and could not fire.
+    """
+
+    def _record(self, n, verdict, title="SQL injection"):
+        for _ in range(n):
+            episodic.record_episode(
+                signature=episodic.make_signature("code", title),
+                language="python",
+                finding_title=title,
+                severity="High",
+                verdict=verdict,
+            )
+
+    def test_repeated_fixes_produce_a_fact(self):
+        self._record(semantic._MIN_EPISODES_FOR_FACT, episodic.VERDICT_FIXED)
+        assert semantic.consolidate_facts() == 1
+        prefix = episodic.make_signature("code", "SQL injection").split(":", 1)[0]
+        facts = semantic.recall_facts(prefix, "SQL injection")
+        assert len(facts) == 1
+        assert "recurring defect" in facts[0]
+
+    def test_repeated_dismissals_still_produce_a_fact(self):
+        self._record(semantic._MIN_EPISODES_FOR_FACT, episodic.VERDICT_DISMISSED)
+        assert semantic.consolidate_facts() == 1
+        prefix = episodic.make_signature("code", "SQL injection").split(":", 1)[0]
+        assert "false positive" in semantic.recall_facts(prefix, "SQL injection")[0]
+
+    def test_the_two_verdicts_are_separate_facts(self):
+        """Fixed and dismissed say opposite things, so they must not merge."""
+        self._record(semantic._MIN_EPISODES_FOR_FACT, episodic.VERDICT_FIXED)
+        self._record(semantic._MIN_EPISODES_FOR_FACT, episodic.VERDICT_DISMISSED)
+        assert semantic.consolidate_facts() == 2
+
+    def test_below_threshold_still_writes_nothing(self):
+        self._record(semantic._MIN_EPISODES_FOR_FACT - 1, episodic.VERDICT_FIXED)
+        assert semantic.consolidate_facts() == 0
+
+    def test_recall_survives_a_change_of_title_case(self):
+        """The model returns "Hardcoded database password" one run and
+        "Hardcoded Database Password" the next; an exact match loses the fact."""
+        self._record(semantic._MIN_EPISODES_FOR_FACT, episodic.VERDICT_FIXED,
+                     title="Hardcoded database password")
+        semantic.consolidate_facts()
+        prefix = episodic.make_signature(
+            "code", "Hardcoded database password"
+        ).split(":", 1)[0]
+        assert semantic.recall_facts(prefix, "Hardcoded Database Password")
+
+    def test_rerunning_consolidation_updates_rather_than_duplicates(self):
+        self._record(semantic._MIN_EPISODES_FOR_FACT, episodic.VERDICT_FIXED)
+        semantic.consolidate_facts()
+        self._record(2, episodic.VERDICT_FIXED)  # same cluster grows
+        semantic.consolidate_facts()
+
+        prefix = episodic.make_signature("code", "SQL injection").split(":", 1)[0]
+        facts = semantic.recall_facts(prefix, "SQL injection")
+        assert len(facts) == 1, "the fact should be updated in place, not duplicated"
+        assert "5 times" in facts[0]
+
+    def test_both_verdicts_on_one_snippet_survive_a_rerun(self):
+        """The upsert keys on the verdict as well as (prefix, title). Without
+        that, the second cluster overwrites the first on every run and the
+        stored fact flips meaning depending on row order."""
+        self._record(semantic._MIN_EPISODES_FOR_FACT, episodic.VERDICT_FIXED)
+        self._record(semantic._MIN_EPISODES_FOR_FACT, episodic.VERDICT_DISMISSED)
+        semantic.consolidate_facts()
+        semantic.consolidate_facts()
+
+        prefix = episodic.make_signature("code", "SQL injection").split(":", 1)[0]
+        facts = semantic.recall_facts(prefix, "SQL injection")
+        assert len(facts) == 2
+        assert any("recurring defect" in f for f in facts)
+        assert any("false positive" in f for f in facts)
